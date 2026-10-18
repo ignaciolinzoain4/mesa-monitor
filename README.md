@@ -5,6 +5,8 @@ atendida, sucia), cuánto tiempo pasa en cada estado y **avisa** cuando una mesa
 Incluye un panel de análisis y una API para conectarlo con el sistema de gestión.
 
 - No graba video ni reconoce caras. Todo funciona dentro de la red del local.
+- Mide la atención de **mesas**, no el trabajo de cada empleado: no sabe qué mozo atendió qué mesa.
+  Antes de usarlo en el local, ver [docs/cumplimiento.md](docs/cumplimiento.md).
 - Especificación completa: [SPEC.md](SPEC.md).
 - Licencia: [Apache-2.0](LICENSE).
 

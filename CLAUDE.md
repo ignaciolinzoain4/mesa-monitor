@@ -14,6 +14,16 @@ Las decisiones marcadas **[DECIDIDO]** no se discuten sin un impedimento técnic
 - Verificar la API actual de `rfdetr`, `supervision`, `trackers` y `go2rtc` en el código instalado antes de usarlas.
 - Commits chicos; al cerrar cada fase: tests en verde, README actualizado, resumen de hecho/pendiente.
 
+## Cumplimiento (SPEC Anexo A — tiene prioridad sobre el resto de la spec)
+- El sistema **no identifica empleados**. Los `track_id` viven solo en memoria; nunca se persisten
+  ni se asocian a visitas, sesiones o métricas. `staff_visits` = solo tiempos.
+- Métricas solo por mesa / sector / franja / día / turno (`core.metrics.MetricsGroupBy`, lista cerrada).
+  Prohibido: métricas o rankings por empleado, asignación mozo ↔ mesa, "desempeño del mozo".
+- UI: hablar de "atención de mesas" y "servicio", nunca de "desempeño" o "productividad del personal".
+- No cruzar datos del POS (mozo asignado) con métricas de cámara sin revisión legal.
+- `tests/test_compliance.py` recorre el esquema (tablas y vistas) y falla con columnas de identidad.
+  Detalle para el dueño: [docs/cumplimiento.md](docs/cumplimiento.md).
+
 ## Estructura
 - `src/mesa_monitor/core/` — dominio puro (enums, ids, state engine, métricas). Sin IO ni visión.
 - `src/mesa_monitor/db/` — modelos SQLAlchemy 2 (async). Polígonos en coordenadas normalizadas 0–1.

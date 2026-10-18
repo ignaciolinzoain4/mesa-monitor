@@ -458,3 +458,29 @@ Dejar placeholders y pedirlos cuando hagan falta:
 - Ubicación final de las cámaras nuevas: el editor de zonas debe facilitar evaluar qué mesas ve bien cada cámara (marcar mesas sin vista sana).
 - Si el perfil "ropa negra" resulta insuficiente en el replay, recomendar al dueño un distintivo de color (delantal) y recalibrar.
 - Validar si la detección de objetos (vasos, platos) es confiable desde los ángulos reales; si no, usar `clean_mode = staff_visit_only` en esas mesas.
+---
+
+## ANEXO A — Restricciones de cumplimiento (agregado 2026-10-18)
+
+> **Para Claude Code:** este anexo complementa la sección 17 y tiene prioridad sobre cualquier cosa de la spec que lo contradiga. Si ya implementaste algo afectado, revisalo y ajustalo antes de seguir con la fase en curso; informá qué cambiaste.
+
+**Finalidad del sistema:** medir cuánto tiempo pasa una mesa sin ser atendida, para mejorar el servicio y **ayudar** al personal con alertas. **No** es una herramienta de evaluación ni de control individual de empleados. Es una restricción de diseño, no solo de uso.
+
+### A.1 Reglas
+- **Ninguna identificación de empleados.** El sistema distingue "staff" de "cliente" solo para detectar visitas a mesas. Los `track_id` de staff existen solo en memoria y **no se persisten** asociados a visitas, sesiones ni métricas. `staff_visits` guarda inicio y fin de cada visita, **sin identidad** de quién la hizo.
+- **Métricas solo por mesa, sector, franja horaria, día y turno.** **Prohibido:** métricas por empleado, rankings de personal, asignación mozo ↔ mesa o cualquier vista del tipo "desempeño del mozo X".
+- **Lenguaje de la UI:** "atención de mesas" y "servicio"; nunca "desempeño" ni "productividad del personal".
+- **Integración futura con el POS:** si el POS trae el mozo asignado a cada mesa, **no** cruzar ese dato con métricas de cámara sin revisión legal previa. Documentarlo como restricción en el código (comentario en el módulo de métricas) y en `docs/cumplimiento.md`.
+
+### A.2 Documentación a generar: `docs/cumplimiento.md`
+- Finalidad del sistema en lenguaje simple.
+- Checklist para el dueño del local:
+  - [ ] Notificar por escrito a los empleados la existencia y finalidad del sistema (art. 71 LCT).
+  - [ ] Actualizar el cartel de videovigilancia incluyendo la nueva finalidad (Disp. 10/2015 AAIP y modificatorias).
+  - [ ] Actualizar el manual de tratamiento y la inscripción de la base de videovigilancia ante la AAIP.
+  - [ ] Consulta con un abogado laboralista antes de pasar a producción (protocolo de cámaras del Ministerio de Trabajo de Córdoba), incluyendo si se piensa usar alguna métrica para incentivos grupales.
+- **Borrador** de notificación a empleados, marcado claramente como "a revisar por un abogado".
+
+### A.3 Verificación
+- Agregar un test que recorra el esquema de la base y falle si alguna tabla de métricas, visitas o sesiones tiene columnas que identifiquen a un empleado (`staff_id`, `waiter_id`, `employee_*`, `track_id` persistido).
+- Revisar endpoints de `/metrics`: ningún `group_by` por persona.
