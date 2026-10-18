@@ -1,0 +1,48 @@
+# --- Secretos y datos del local: NUNCA al repo ---
+.env
+.env.*
+!.env.example
+config/local/
+media/
+data/
+*.mp4
+*.mkv
+*.avi
+*.mov
+*.dav
+*.jpg
+*.jpeg
+*.png
+!docs/**/*.jpg
+!docs/**/*.jpeg
+!docs/**/*.png
+!dashboard/public/**/*.png
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+dist/
+build/
+*.egg-info/
+
+# --- Modelos descargados ---
+*.pth
+*.pt
+*.onnx
+*.engine
+
+# --- Frontend ---
+node_modules/
+dashboard/dist/
+
+# --- Editor / SO ---
+.DS_Store
+.idea/
+.vscode/
+*.swp

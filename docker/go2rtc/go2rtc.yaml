@@ -1,0 +1,9 @@
+# Config inicial de go2rtc, sin cámaras. A partir de F1 se genera automáticamente
+# desde config/local/cameras.yaml (no editar a mano la versión generada).
+api:
+  listen: ":1984"
+rtsp:
+  listen: ":8554"
+webrtc:
+  listen: ":8555"
+streams: {}

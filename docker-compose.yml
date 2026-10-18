@@ -1,0 +1,106 @@
+# Mesa Monitor. Uso:  cp .env.example .env  (y completar)  →  docker compose up -d
+# El perfil (cpu|gpu) se elige con COMPOSE_PROFILES en el .env.
+
+x-app-env: &app-env
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mesa}:${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}@db:5432/${POSTGRES_DB:-mesa_monitor}
+  GO2RTC_URL: http://go2rtc:1984
+  DASHBOARD_DIST: /app/dashboard/dist
+  CONFIG_DIR: /app/config/local
+
+name: mesa-monitor
+
+services:
+  db:
+    image: postgres:16.15-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-mesa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en .env}
+      POSTGRES_DB: ${POSTGRES_DB:-mesa_monitor}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    # Sin puertos publicados: la base nunca se expone fuera de Docker.
+
+  go2rtc:
+    image: alexxit/go2rtc:1.9.14
+    restart: unless-stopped
+    volumes:
+      - ./docker/go2rtc/go2rtc.yaml:/config/go2rtc.yaml:ro
+    ports:
+      # La UI/API de go2rtc no tiene login: solo accesible desde la misma PC.
+      - "127.0.0.1:1984:1984"
+
+  api:
+    build:
+      context: .
+      target: api
+    image: mesa-monitor-api:local
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment: *app-env
+    volumes:
+      - ./config/local:/app/config/local:ro
+    ports:
+      - "${API_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker-cpu:
+    profiles: [cpu]
+    build:
+      context: .
+      target: worker
+      args:
+        TORCH_VARIANT: cpu
+    image: mesa-monitor-worker:cpu
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment: *app-env
+    volumes:
+      - ./config/local:/app/config/local:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy  # la API aplica las migraciones
+
+  worker-gpu:
+    profiles: [gpu]
+    build:
+      context: .
+      target: worker
+      args:
+        TORCH_VARIANT: cuda
+    image: mesa-monitor-worker:gpu
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment: *app-env
+    volumes:
+      - ./config/local:/app/config/local:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    depends_on:
+      db:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+
+volumes:
+  pgdata:
