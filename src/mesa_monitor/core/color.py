@@ -58,16 +58,24 @@ def intersection(a: NDArray[np.float64], b: NDArray[np.float64]) -> float:
 class ColorProfile:
     staff: NDArray[np.float64]
     customer: NDArray[np.float64]
+    center: float = 0.5  # similitud "neutral" (punto medio entre personal y clientes calibrados)
 
-    def similarity(self, hist: NDArray[np.float64]) -> float:
-        """0 = parece cliente, 1 = parece personal, 0.5 = no distingue."""
+    def raw_similarity(self, hist: NDArray[np.float64]) -> float:
         s = intersection(hist, self.staff)
         c = intersection(hist, self.customer)
         return 0.5 if s + c <= 1e-9 else s / (s + c)
 
+    def similarity(self, hist: NDArray[np.float64]) -> float:
+        """0 = parece cliente, 1 = parece personal, 0.5 = no distingue (centrado en `center`)."""
+        raw = self.raw_similarity(hist)
+        if raw >= self.center:
+            return 0.5 + 0.5 * (raw - self.center) / max(1e-6, 1 - self.center)
+        return 0.5 * raw / max(1e-6, self.center)
+
     def to_json(self) -> dict[str, Any]:
         return {
             "bins": [H_BINS, S_BINS, V_BINS],
+            "center": round(self.center, 4),
             "staff": [round(float(x), 6) for x in self.staff],
             "customer": [round(float(x), 6) for x in self.customer],
         }
@@ -77,7 +85,9 @@ class ColorProfile:
         if data.get("bins") != [H_BINS, S_BINS, V_BINS]:
             return None
         return cls(
-            np.asarray(data["staff"], dtype=float), np.asarray(data["customer"], dtype=float)
+            np.asarray(data["staff"], dtype=float),
+            np.asarray(data["customer"], dtype=float),
+            float(data.get("center", 0.5)),
         )
 
 
@@ -106,13 +116,13 @@ def calibrate(
         raise ValueError(
             "Marcá al menos 2 personas del personal y 2 clientes (ideal: 3 a 10 de cada uno)"
         )
-    profile = ColorProfile(np.mean(staff_hists, axis=0), np.mean(customer_hists, axis=0))
-    s_scores = [profile.similarity(h) for h in staff_hists]
-    c_scores = [profile.similarity(h) for h in customer_hists]
-    spread = (pstdev(s_scores) + pstdev(c_scores)) / 2 or 1e-3
-    separation = (fmean(s_scores) - fmean(c_scores)) / spread
-    threshold = (fmean(s_scores) + fmean(c_scores)) / 2
+    raw = ColorProfile(np.mean(staff_hists, axis=0), np.mean(customer_hists, axis=0))
+    s_raw = [raw.raw_similarity(h) for h in staff_hists]
+    c_raw = [raw.raw_similarity(h) for h in customer_hists]
+    spread = (pstdev(s_raw) + pstdev(c_raw)) / 2 or 1e-3
+    separation = (fmean(s_raw) - fmean(c_raw)) / spread
+    profile = ColorProfile(raw.staff, raw.customer, (fmean(s_raw) + fmean(c_raw)) / 2)
+    s_scores = [round(profile.similarity(h), 3) for h in staff_hists]
+    c_scores = [round(profile.similarity(h), 3) for h in customer_hists]
     weight = round(min(2.0, max(0.2, separation / 1.5)), 2)
-    return Calibration(
-        profile, round(threshold, 3), round(separation, 2), s_scores, c_scores, weight
-    )
+    return Calibration(profile, 0.5, round(separation, 2), s_scores, c_scores, weight)

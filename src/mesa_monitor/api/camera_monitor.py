@@ -54,6 +54,7 @@ class CameraMonitor:
         self._offline_after = offline_after_s
         self._clock = clock
         self._health: dict[str, CameraHealth] = {}
+        self.names: dict[str, str] = {}
         self._task: asyncio.Task[None] | None = None
 
     def set_cameras(self, cameras: dict[str, tuple[int, int] | None]) -> None:
@@ -103,6 +104,9 @@ class CameraMonitor:
         log.info("Cámara %s: %s (%s)", h.camera_id, h.status.value, h.detail or "ok")
         if self._sessionmaker is None:
             return
+        from mesa_monitor.api.publish import publish
+        from mesa_monitor.core.events import CameraStatusData
+
         async with self._sessionmaker() as session:
             session.add(
                 CameraStatusLog(
@@ -111,6 +115,16 @@ class CameraMonitor:
                     status=h.status,
                     detail=h.detail,
                 )
+            )
+            await publish(
+                session,
+                "camera.status",
+                CameraStatusData(
+                    camera_id=h.camera_id,
+                    name=self.names.get(h.camera_id, h.camera_id),
+                    status=h.status,
+                    detail=h.detail,
+                ),
             )
             await session.commit()
 

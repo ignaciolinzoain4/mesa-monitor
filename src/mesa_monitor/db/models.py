@@ -172,7 +172,7 @@ class StaffVisit(Base):
     session_id: Mapped[str] = mapped_column(ForeignKey("table_sessions.id", ondelete="CASCADE"))
     table_id: Mapped[str] = mapped_column(ForeignKey("tables.id", ondelete="CASCADE"))
     started_at: Mapped[datetime] = mapped_column(utc_ts())
-    ended_at: Mapped[datetime] = mapped_column(utc_ts())
+    ended_at: Mapped[datetime | None] = mapped_column(utc_ts())  # NULL mientras sigue
     confidence: Mapped[float | None] = mapped_column(Float)
 
 
@@ -190,6 +190,41 @@ class StateTransition(Base):
     to_state: Mapped[TableState] = mapped_column(str_enum(TableState, "to_state"))
     reason: Mapped[str] = mapped_column(String(64))
     confidence: Mapped[float | None] = mapped_column(Float)
+
+
+class TableStateRow(Base):
+    """Estado vigente de cada mesa (lo escribe el worker; lo lee la API y la reconstrucción)."""
+
+    __tablename__ = "table_state"
+
+    table_id: Mapped[str] = mapped_column(
+        ForeignKey("tables.id", ondelete="CASCADE"), primary_key=True
+    )
+    state: Mapped[TableState] = mapped_column(str_enum(TableState, "current_state"))
+    state_since: Mapped[datetime | None] = mapped_column(utc_ts())
+    paused_s: Mapped[float] = mapped_column(Float, server_default=text("0"))
+    resume_state: Mapped[TableState | None] = mapped_column(str_enum(TableState, "resume_state"))
+    vision_lost_since: Mapped[datetime | None] = mapped_column(utc_ts())
+    session_id: Mapped[str | None] = mapped_column(
+        ForeignKey("table_sessions.id", ondelete="SET NULL")
+    )
+    people_now: Mapped[int] = mapped_column(SmallInteger, server_default=text("0"))
+    staff_present: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    updated_at: Mapped[datetime] = mapped_column(utc_ts())
+
+
+class EventLog(Base):
+    """Bandeja de salida de eventos: el worker y la API insertan, la API los difunde por
+    WebSocket y webhooks (NOTIFY `mesa_events` con el id). Retención limitada."""
+
+    __tablename__ = "events"
+    __table_args__ = (Index("ix_events_ts", "ts"),)
+
+    id: Mapped[str] = mapped_column(String(40), primary_key=True)
+    type: Mapped[str] = mapped_column(String(64))
+    ts: Mapped[datetime] = mapped_column(utc_ts())
+    table_id: Mapped[str | None] = mapped_column(String(40))
+    payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
 
 
 # --------------------------------------------------------------------------- alertas y umbrales

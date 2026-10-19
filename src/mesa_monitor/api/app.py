@@ -17,8 +17,28 @@ from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
 from mesa_monitor import __version__
+from mesa_monitor.api.alert_engine import AlertEngine
 from mesa_monitor.api.camera_monitor import CameraMonitor
-from mesa_monitor.api.routes import auth, cameras, config_io, health, tables, zones
+from mesa_monitor.api.events_hub import EventsHub
+from mesa_monitor.api.ratelimit import RateLimitMiddleware
+from mesa_monitor.api.routes import (
+    access,
+    alerts,
+    auth,
+    cameras,
+    config_admin,
+    config_io,
+    health,
+    staff_profiles,
+    state,
+    system,
+    tables,
+    webhooks,
+    ws,
+    zones,
+)
+from mesa_monitor.api.snapshots import SnapshotCache
+from mesa_monitor.api.webhooks import WebhookDispatcher
 from mesa_monitor.config import Settings, get_settings
 from mesa_monitor.config.cameras import CamerasConfigError, CamerasFile, load_cameras
 from mesa_monitor.db.bootstrap import ensure_admin, sync_cameras
@@ -59,7 +79,9 @@ def create_app(
     settings: Settings | None = None,
     *,
     go2rtc_transport: httpx.AsyncBaseTransport | None = None,
+    webhook_transport: httpx.AsyncBaseTransport | None = None,
     start_background_tasks: bool = True,
+    rate_limit: bool = True,
 ) -> FastAPI:
     settings = settings or get_settings()
     setup_logging(settings.log_level)
@@ -79,6 +101,13 @@ def create_app(
             offline_after_s=settings.camera_offline_after_s,
         )
         app.state.camera_monitor = monitor
+        alert_engine = AlertEngine(sessionmaker, monitor, settings.tz)
+        app.state.alert_engine = alert_engine
+        hub = EventsHub(settings.database_url, sessionmaker)
+        hub.on_config_changed.append(lambda data: alert_engine.invalidate())
+        app.state.events_hub = hub
+        dispatcher = WebhookDispatcher(sessionmaker, transport=webhook_transport)
+        app.state.webhooks = dispatcher
         try:
             async with sessionmaker() as session:
                 await ensure_admin(
@@ -90,14 +119,21 @@ def create_app(
                     monitor.set_cameras(
                         {c.id: c.expected_resolution for c in cams.cameras if c.enabled}
                     )
+                    monitor.names = {c.id: c.name for c in cams.cameras}
         except Exception:
             # Sin base la API igual levanta: /health informa el problema.
             log.exception("No se pudo inicializar la base")
         if start_background_tasks:
             monitor.start()
+            hub.start()
+            alert_engine.start()
+            dispatcher.start()
         try:
             yield
         finally:
+            await alert_engine.stop()
+            await dispatcher.stop()
+            await hub.stop()
             await monitor.stop()
             await app.state.go2rtc.aclose()
             await engine.dispose()
@@ -111,6 +147,7 @@ def create_app(
         redoc_url=None,
     )
     app.state.settings = settings
+    app.state.snapshots = SnapshotCache()
 
     if settings.cors_origins:
         app.add_middleware(
@@ -120,7 +157,25 @@ def create_app(
             allow_headers=["*"],
         )
 
-    for module in (health, auth, cameras, tables, zones, config_io):
+    if rate_limit:
+        app.add_middleware(RateLimitMiddleware)
+
+    for module in (
+        health,
+        auth,
+        access,
+        state,
+        alerts,
+        cameras,
+        tables,
+        zones,
+        config_io,
+        config_admin,
+        staff_profiles,
+        webhooks,
+        system,
+        ws,
+    ):
         app.include_router(module.router, prefix=API_PREFIX)
 
     dist = Path(settings.dashboard_dist)

@@ -92,6 +92,9 @@ services:
         TORCH_VARIANT: cpu
     image: mesa-monitor-worker:cpu
     restart: unless-stopped
+    networks:
+      default:
+        aliases: [worker]  # la API lee el overlay de debug en http://worker:8001
     env_file:
       - path: .env
         required: false
@@ -104,6 +107,8 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy  # la API aplica las migraciones
+      go2rtc:
+        condition: service_started
 
   worker-gpu:
     profiles: [gpu]
@@ -114,6 +119,9 @@ services:
         TORCH_VARIANT: cuda
     image: mesa-monitor-worker:gpu
     restart: unless-stopped
+    networks:
+      default:
+        aliases: [worker]  # la API lee el overlay de debug en http://worker:8001
     env_file:
       - path: .env
         required: false
@@ -133,6 +141,8 @@ services:
         condition: service_healthy
       api:
         condition: service_healthy
+      go2rtc:
+        condition: service_started
 
 volumes:
   pgdata:

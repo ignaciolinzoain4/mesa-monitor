@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     config_dir: Path = Path("config/local")
     dashboard_dist: Path = Path("dashboard/dist")
     go2rtc_url: str = "http://go2rtc:1984"
+    go2rtc_rtsp_url: str = "rtsp://go2rtc:8554"  # restream interno que lee el worker
+    worker_debug_url: str = "http://worker:8001"  # overlay de debug (MJPEG) del worker
 
     jwt_ttl_minutes: int = 12 * 60
     # Monitor de cámaras: cada cuánto se pide un frame y a partir de cuándo se considera caída.

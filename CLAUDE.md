@@ -55,8 +55,7 @@ uv run alembic revision --autogenerate -m "describe change"   # revisar el archi
 uv run alembic upgrade head
 ```
 Los enums se guardan como texto + CHECK (`db.base.str_enum`). Alembic autogenera esos CHECK dos
-veces: dejar solo los nombrados con `op.f('ck_...')` y usar `create_constraint=False` en el `sa.Enum`
-de la migración. `test_models_match_migrations` detecta divergencias entre modelos y migraciones.
+veces; el hook `tools/fix_enum_checks.py` (configurado en alembic.ini) deja solo los `ck_...`. `test_models_match_migrations` detecta divergencias entre modelos y migraciones.
 
 ## Decisiones tomadas (además de SPEC)
 - IDs públicos: prefijo + ULID (`core.ids.new_id("alr")`). Tablas de alto volumen: bigint.

@@ -28,6 +28,7 @@ class StaffWeights:
     confirm_frames: int = 3
     memory_s: float = 300
     long_seated_s: float = 120
+    table_dwell_s: float = 2.0  # permanencia mínima para contar que "visitó" una mesa
 
     @classmethod
     def from_json(
@@ -52,7 +53,7 @@ class PersonFeatures:
 class StaffClassifier(Protocol):
     def classify(self, f: PersonFeatures) -> bool: ...  # True = personal
 
-    def forget(self, active_track_ids: set[int]) -> None: ...
+    def forget(self, active_track_ids: set[int], now: datetime | None = None) -> None: ...
 
 
 @dataclass
@@ -64,6 +65,8 @@ class _Track:
     score: float = 0.0
     last_staff_zone: datetime | None = None
     tables: deque[tuple[datetime, str]] = field(default_factory=lambda: deque(maxlen=64))
+    at_table: str | None = None
+    at_table_since: datetime | None = None
     seated_table: str | None = None
     seated_since: datetime | None = None
     color: float | None = None  # promedio exponencial
@@ -75,6 +78,7 @@ class HeuristicStaffClassifier:
     ) -> None:
         self.weights = weights or StaffWeights()
         self.profile = profile
+        self.forget_after_s = 10.0
         self._tracks: dict[int, _Track] = {}
 
     def configure(self, weights: StaffWeights, profile: ColorProfile | None) -> None:
@@ -88,7 +92,7 @@ class HeuristicStaffClassifier:
         if t.last_staff_zone and f.ts - t.last_staff_zone <= memory:
             s += w.staff_zone
         recent = {tid for (ts, tid) in t.tables if f.ts - ts <= memory}
-        if len(recent) >= 2:
+        if len(recent) >= 2 and f.standing:
             s += w.multi_table
         if t.seated_since and (f.ts - t.seated_since).total_seconds() >= w.long_seated_s:
             s += w.long_seated
@@ -103,7 +107,16 @@ class HeuristicStaffClassifier:
         t.last_seen = f.ts
         if f.in_staff_zone:
             t.last_staff_zone = f.ts
-        if f.table_id and (not t.tables or t.tables[-1][1] != f.table_id):
+        # Una mesa cuenta como visitada si la persona permanece ahí `table_dwell_s` (evita que el
+        # punto de anclaje oscilando entre asientos vecinos parezca "visitar dos mesas").
+        if f.table_id != t.at_table:
+            t.at_table, t.at_table_since = f.table_id, f.ts
+        elif (
+            f.table_id
+            and t.at_table_since is not None
+            and (f.ts - t.at_table_since).total_seconds() >= self.weights.table_dwell_s
+            and (not t.tables or t.tables[-1][1] != f.table_id)
+        ):
             t.tables.append((f.ts, f.table_id))
         if not f.standing and f.table_id:
             if t.seated_table != f.table_id:
@@ -130,9 +143,13 @@ class HeuristicStaffClassifier:
             t.streak = 0
         return t.is_staff
 
-    def forget(self, active_track_ids: set[int]) -> None:
-        for tid in list(self._tracks):
-            if tid not in active_track_ids:
+    def forget(self, active_track_ids: set[int], now: datetime | None = None) -> None:
+        """Olvida tracks que no se ven hace `forget_after_s`. Un track que el detector pierde
+        por uno o dos frames conserva su clasificación (si no, el mozo "parpadea" a cliente)."""
+        for tid, t in list(self._tracks.items()):
+            if tid in active_track_ids:
+                continue
+            if now is None or (now - t.last_seen).total_seconds() > self.forget_after_s:
                 del self._tracks[tid]
 
     def debug_score(self, track_id: int) -> float | None:

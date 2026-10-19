@@ -4,10 +4,13 @@ Las cámaras se definen en `config/local/cameras.yaml`; la base guarda un espejo
 alta/baja de cámaras desde la API: se edita el YAML y se reinicia `go2rtc-config` + `go2rtc`.
 """
 
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Annotated
 
+import httpx
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 
@@ -92,7 +95,46 @@ async def get_snapshot(
         frame = await client.frame(camera_id, stream)
     except SnapshotError as exc:
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
-    headers = {"Cache-Control": "no-store"}
+    headers = {
+        "Cache-Control": "no-store",
+        # Id para calibrar el perfil de personal sobre esta misma imagen.
+        "X-Snapshot-Id": request.app.state.snapshots.put(frame.jpeg),
+        "Access-Control-Expose-Headers": "X-Snapshot-Id, X-Frame-Size",
+    }
     if frame.width and frame.height:
         headers["X-Frame-Size"] = f"{frame.width}x{frame.height}"
     return Response(frame.jpeg, media_type="image/jpeg", headers=headers)
+
+
+@router.get(
+    "/{camera_id}/debug.mjpeg", responses={200: {"content": {"multipart/x-mixed-replace": {}}}}
+)
+async def debug_stream(camera_id: str, request: Request, db: DbSession, _: AdminUser) -> Response:
+    """Overlay de debug del worker (cajas, tracks, personal/cliente, zonas). Apagado por defecto:
+    se activa en Configuración → Visión. Solo para calibrar; no se graba."""
+    if await db.get(Camera, camera_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Cámara inexistente")
+    url = f"{request.app.state.settings.worker_debug_url}/debug/{camera_id}.mjpeg"
+    client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=None))
+    try:
+        upstream = await client.send(client.build_request("GET", url), stream=True)
+    except httpx.HTTPError as exc:
+        await client.aclose()
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail="El worker no responde") from exc
+    if upstream.status_code != 200:
+        await upstream.aclose()
+        await client.aclose()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail="El overlay de debug está desactivado (Configuración → Visión)",
+        )
+
+    async def body() -> AsyncIterator[bytes]:
+        try:
+            async for chunk in upstream.aiter_raw():
+                yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    return StreamingResponse(body(), media_type=upstream.headers.get("content-type"))

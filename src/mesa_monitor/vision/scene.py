@@ -105,14 +105,58 @@ class Box:
 
 @dataclass(frozen=True)
 class PostureParams:
-    standing_ratio: float = 1.6  # alto/ancho en píxeles reales por encima del cual está parado
+    """Postura sin keypoints: proporción alto/ancho en píxeles reales + movimiento.
+
+    Con cámaras en altura una persona sentada se ve casi tan alargada como una parada (en un
+    video real: sentados 1.3–2.8, parados 2.9–3.9), pero los sentados casi no se mueven. Por eso:
+    parado = proporción ≥ `standing_ratio`, o proporción ≥ `moving_ratio` y desplazándose.
+    """
+
+    standing_ratio: float = 2.6
+    moving_ratio: float = 1.8
+    moving_speed: float = (
+        0.02  # desplazamiento del punto de anclaje (fracción de imagen) por segundo
+    )
+    motion_window_s: float = 3.0
     frame_aspect: float = 16 / 9  # ancho/alto del frame en píxeles reales (corrige substreams D1)
 
 
-def is_standing(box: Box, p: PostureParams) -> bool:
-    w = max(1e-6, (box.x2 - box.x1) * p.frame_aspect)
-    h = box.y2 - box.y1
-    return h / w >= p.standing_ratio
+def aspect_ratio(box: Box, frame_aspect: float) -> float:
+    w = max(1e-6, (box.x2 - box.x1) * frame_aspect)
+    return (box.y2 - box.y1) / w
+
+
+def is_standing(box: Box, p: PostureParams, speed: float | None = None) -> bool:
+    ratio = aspect_ratio(box, p.frame_aspect)
+    if ratio >= p.standing_ratio:
+        return True
+    return speed is not None and speed >= p.moving_speed and ratio >= p.moving_ratio
+
+
+class MotionTracker:
+    """Velocidad de cada track (memoria corta, solo en RAM)."""
+
+    def __init__(self) -> None:
+        self._hist: dict[int, list[tuple[float, float, float]]] = {}
+
+    def speed(self, track_id: int, ts: datetime, x: float, y: float, window_s: float) -> float:
+        t = ts.timestamp()
+        h = self._hist.setdefault(track_id, [])
+        h.append((t, x, y))
+        while h and t - h[0][0] > window_s:
+            h.pop(0)
+        if len(h) < 2 or h[-1][0] - h[0][0] < 0.5:
+            return 0.0
+        (t0, x0, y0), (t1, x1, y1) = h[0], h[-1]
+        return float(((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5 / (t1 - t0))
+
+    def forget(self, active: set[int], now: datetime | None = None, after_s: float = 10.0) -> None:
+        t = now.timestamp() if now else None
+        for tid, h in list(self._hist.items()):
+            if tid in active:
+                continue
+            if t is None or not h or t - h[-1][0] > after_s:
+                del self._hist[tid]
 
 
 @dataclass(frozen=True)
@@ -145,6 +189,7 @@ def analyze_frame(
     posture: PostureParams,
     color_similarity: dict[int, float] | None = None,
     objects_enabled: bool = True,
+    motion: MotionTracker | None = None,
 ) -> SceneResult:
     people: list[PersonResult] = []
     active: set[int] = set()
@@ -152,7 +197,12 @@ def analyze_frame(
         ax, ay = b.anchor
         if zones.masked(ax, ay):
             continue
-        standing = is_standing(b, posture)
+        speed = (
+            motion.speed(b.track_id, ts, ax, ay, posture.motion_window_s)
+            if motion is not None and b.track_id is not None
+            else None
+        )
+        standing = is_standing(b, posture, speed)
         table = zones.table_at(ax, ay)
         staff = False
         if b.track_id is not None:
@@ -168,7 +218,9 @@ def analyze_frame(
                 )
             )
         people.append(PersonResult(b, standing, table, staff))
-    classifier.forget(active)
+    classifier.forget(active, ts)
+    if motion is not None:
+        motion.forget(active, ts)
 
     tables: dict[str, TableCounts] = {}
     obj_list = [o for o in objects if not zones.masked(*o.center)]

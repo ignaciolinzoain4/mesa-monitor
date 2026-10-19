@@ -119,10 +119,14 @@ def test_long_seated_person_is_customer() -> None:
     assert out is False
 
 
-def test_tracks_are_forgotten() -> None:
-    clf = HeuristicStaffClassifier()
-    clf.classify(PersonFeatures(5, T0, True, None, False, None))
-    clf.forget(set())
+def test_tracks_survive_short_gaps_and_are_forgotten_later() -> None:
+    clf = HeuristicStaffClassifier(StaffWeights(confirm_frames=2))
+    for i in range(3):
+        clf.classify(PersonFeatures(5, T0 + timedelta(seconds=i), True, None, True, None))
+    # el detector lo pierde 2 s: conserva la clasificación de personal
+    clf.forget(set(), T0 + timedelta(seconds=4))
+    assert clf.classify(PersonFeatures(5, T0 + timedelta(seconds=5), True, None, True, None))
+    clf.forget(set(), T0 + timedelta(seconds=30))
     assert clf.debug_score(5) is None
 
 
