@@ -17,10 +17,10 @@ Incluye un panel de análisis y una API para conectarlo con el sistema de gesti�
 | F0 | Esqueleto: Docker Compose, Postgres + migraciones, API `/health`, dashboard vacío, CI | ✅ |
 | F1 | Ingesta de cámaras (go2rtc), snapshots, benchmark de hardware | ✅ |
 | F2 | Editor de zonas y plano del salón, respaldo YAML | ✅ |
-| F3 | Detección + tracking + overlay + replay de video | Pendiente |
-| F4 | Máquina de estados de mesa + clasificador de mozos | Pendiente |
-| F5 | API completa, WebSocket, alertas, webhooks | Pendiente |
-| F6 | Pantalla de alertas para PCs de tiqueo | Pendiente |
+| F3 | Detección (RF-DETR por mosaicos) + tracking + overlay + replay de video | ✅ |
+| F4 | Máquina de estados + persistencia + clasificador y calibración de personal | ✅ |
+| F5 | API completa, WebSocket, motor de alertas, webhooks, accesos | ✅ |
+| F6 | Pantalla /alertas para PCs de tiqueo (sonido, PIN, reconexión) | ✅ |
 | F7 | Análisis y métricas | Pendiente |
 | F8 | Cliente Python + guía de integración | Pendiente |
 | F9 | Evaluación y ajuste | Pendiente |

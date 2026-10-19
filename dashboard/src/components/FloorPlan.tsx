@@ -19,6 +19,14 @@ type Props = {
 
 const snap = (v: number) => Math.round(v * 2) / 2
 
+/** Tamaño de letra que entra en la mesa según el largo de la etiqueta. */
+// eslint-disable-next-line react-refresh/only-export-components
+export function labelFontSize(t: Table, scale = 0.32): number {
+  const byHeight = Math.min(t.plan_w, t.plan_h) * scale
+  const byWidth = (t.plan_w * 0.9) / Math.max(1, t.label.length * 0.62)
+  return Math.min(byHeight, byWidth)
+}
+
 export function FloorPlan({ tables, fill, stroke, content, selectedId, onSelect, onMove, className }: Props) {
   const svgRef = useRef<SVGSVGElement>(null)
   const [drag, setDrag] = useState<{ id: string; dx: number; dy: number } | null>(null)
@@ -89,7 +97,7 @@ export function FloorPlan({ tables, fill, stroke, content, selectedId, onSelect,
               {content ? (
                 content(t)
               ) : (
-                <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={Math.min(t.plan_w, t.plan_h) * 0.4} fill="#f8fafc" fontWeight={600}>
+                <text x={cx} y={cy} textAnchor="middle" dominantBaseline="central" fontSize={labelFontSize(t, 0.4)} fill="#f8fafc" fontWeight={600}>
                   {t.label}
                 </text>
               )}

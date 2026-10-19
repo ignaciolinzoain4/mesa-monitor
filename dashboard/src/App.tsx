@@ -2,8 +2,13 @@ import { createBrowserRouter, Navigate, RouterProvider, useLocation } from 'reac
 import type { ReactNode } from 'react'
 import { Layout } from './components/Layout'
 import { AuthProvider, useAuth } from './lib/auth'
+import { AlertasPage } from './pages/AlertasPage'
 import { BackupPage } from './pages/BackupPage'
 import { CamerasPage } from './pages/CamerasPage'
+import { HealthPage } from './pages/HealthPage'
+import { LivePage } from './pages/LivePage'
+import { SessionsPage } from './pages/SessionsPage'
+import { SettingsPage } from './pages/SettingsPage'
 import { LoginPage } from './pages/LoginPage'
 import { PlanPage } from './pages/PlanPage'
 import { ZonesPage } from './pages/ZonesPage'
@@ -19,6 +24,7 @@ function RequireAuth({ children, admin = false }: { children: ReactNode; admin?:
 
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  { path: '/alertas', element: <AlertasPage /> },
   {
     element: (
       <RequireAuth>
@@ -26,7 +32,11 @@ const router = createBrowserRouter([
       </RequireAuth>
     ),
     children: [
-      { path: '/', element: <Navigate to="/camaras" replace /> },
+      { path: '/', element: <Navigate to="/en-vivo" replace /> },
+      { path: '/en-vivo', element: <LivePage /> },
+      { path: '/sesiones', element: <SessionsPage /> },
+      { path: '/salud', element: <HealthPage /> },
+      { path: '/configuracion', element: <RequireAuth admin><SettingsPage /></RequireAuth> },
       { path: '/camaras', element: <RequireAuth admin><CamerasPage /></RequireAuth> },
       { path: '/zonas', element: <RequireAuth admin><ZonesPage /></RequireAuth> },
       { path: '/plano', element: <RequireAuth admin><PlanPage /></RequireAuth> },

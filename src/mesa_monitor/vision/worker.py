@@ -161,6 +161,9 @@ class Worker:
             frame = self.sources[cid].latest()
             fresh = frame is not None and (now - frame.ts).total_seconds() < FRAME_STALE_S
             healthy[cid] = fresh
+            zones = self.cfg.zones.get(cid)
+            if zones is None or not zones.views:
+                continue  # cámara sin mesas dibujadas: no se gasta GPU en ella
             if not fresh or mono < self._next_due.get(cid, 0):
                 continue
             self._next_due[cid] = mono + 1.0 / cam.fps
@@ -197,7 +200,8 @@ class Worker:
         pipe = self.pipelines[cid]
         if pipe.last_frame is None or pipe.last_result is None:
             return
-        img = Image.fromarray(annotate(pipe.last_frame, pipe.zones, pipe.last_result))
+        labels = {tid: t.label for tid, t in self.cfg.tables.items()}
+        img = Image.fromarray(annotate(pipe.last_frame, pipe.zones, pipe.last_result, labels))
         buf = BytesIO()
         img.save(buf, format="JPEG", quality=70)
         with self._debug_lock:

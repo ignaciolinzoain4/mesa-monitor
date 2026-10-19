@@ -2,9 +2,13 @@ import { NavLink, Outlet } from 'react-router'
 import { useAuth } from '../lib/auth'
 
 const NAV: { to: string; label: string; adminOnly?: boolean }[] = [
+  { to: '/en-vivo', label: 'En vivo' },
+  { to: '/sesiones', label: 'Sesiones' },
+  { to: '/salud', label: 'Salud del sistema' },
   { to: '/camaras', label: 'Cámaras', adminOnly: true },
   { to: '/zonas', label: 'Zonas', adminOnly: true },
   { to: '/plano', label: 'Plano del salón', adminOnly: true },
+  { to: '/configuracion', label: 'Configuración', adminOnly: true },
   { to: '/respaldo', label: 'Respaldo', adminOnly: true },
 ]
 

@@ -113,12 +113,15 @@ async def resolve_token(db: AsyncSession, settings: Settings, token: str) -> Pri
 
 
 async def get_principal(
+    request: Request,
     db: DbSession,
     settings: Annotated[Settings, Depends(get_settings_dep)],
     creds: Annotated[HTTPAuthorizationCredentials | None, Depends(_bearer)],
     api_key: Annotated[str | None, Depends(_api_key)],
 ) -> Principal:
-    token = api_key or (creds.credentials if creds else None)
+    # `?access_token=` solo para <img>/MJPEG (el navegador no puede mandar headers ahí).
+    query_token = request.query_params.get("access_token") if request.method == "GET" else None
+    token = api_key or (creds.credentials if creds else None) or query_token
     if not token:
         raise _unauthorized("Falta iniciar sesión o la API key")
     return await resolve_token(db, settings, token)

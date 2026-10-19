@@ -66,3 +66,53 @@ export type CameraZones = {
 }
 
 export type TableState = 'LIBRE' | 'OCUPADA_SIN_ATENDER' | 'ATENDIDA' | 'DESOCUPADA_SUCIA' | 'SIN_VISION' | 'DESHABILITADA'
+
+export type Severity = 'info' | 'warning' | 'critical'
+export type AlertType = 'SIN_ATENCION' | 'SIN_VISITA' | 'MESA_SUCIA' | 'ESTADIA_LARGA' | 'CAMARA_CAIDA'
+export type AlertStatus = 'open' | 'acknowledged' | 'resolved'
+
+export type TableRef = { id: string; label: string; sector: string }
+
+export type TableStateData = {
+  table: TableRef
+  state: TableState
+  state_since: string | null
+  elapsed_seconds: number | null
+  previous_state?: TableState | null
+  reason?: string | null
+  session_id: string | null
+  seated_at: string | null
+  first_attention_at: string | null
+  last_visit_at: string | null
+  vacated_at: string | null
+  people: number
+}
+
+export type AlertData = {
+  alert_id: string
+  alert_type: AlertType
+  severity: Severity
+  status: AlertStatus
+  table: TableRef | null
+  camera_id: string | null
+  state: TableState | null
+  state_since: string | null
+  elapsed_seconds: number | null
+  threshold_seconds: number
+  opened_at: string
+  acknowledged_at: string | null
+  snoozed_until: string | null
+  resolved_at: string | null
+}
+
+export type CameraStatusData = { camera_id: string; name: string; status: CameraStatus; detail: string | null }
+
+export type Envelope<T extends string, D> = { schema_version: 1; id: string; type: T; ts: string; data: D }
+
+export type LiveEvent =
+  | Envelope<'snapshot', { tables: TableStateData[]; alerts: AlertData[]; cameras: CameraStatusData[] }>
+  | Envelope<'table.state_changed', TableStateData>
+  | Envelope<'table.staff_visit', { table: TableRef; session_id: string; visit_id: string; started_at: string }>
+  | Envelope<'alert.opened' | 'alert.updated' | 'alert.resolved', AlertData>
+  | Envelope<'camera.status', CameraStatusData>
+  | Envelope<'heartbeat', Record<string, string>>

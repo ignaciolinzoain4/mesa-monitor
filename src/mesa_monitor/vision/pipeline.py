@@ -154,7 +154,10 @@ class CameraPipeline:
 
 
 def annotate(
-    frame: NDArray[np.uint8], zones: CameraZonesRT, result: SceneResult
+    frame: NDArray[np.uint8],
+    zones: CameraZonesRT,
+    result: SceneResult,
+    labels: dict[str, str] | None = None,
 ) -> NDArray[np.uint8]:
     """Overlay de debug: zonas, personas (personal en amarillo, clientes en celeste) y conteos.
 
@@ -179,9 +182,8 @@ def annotate(
         counts = result.tables.get(v.table_id)
         if counts:
             x, y = px(v.table_polygon)[0]
-            label = f"{v.table_id[-6:]} s:{counts.seated_customers}" + (
-                " M" if counts.staff_present else ""
-            )
+            name = (labels or {}).get(v.table_id, v.table_id)
+            label = f"{name} s:{counts.seated_customers}" + (" M" if counts.staff_present else "")
             d.text((x + 2, y + 2), label, fill=(255, 255, 255, 255))
     for p in result.people:
         b = p.box

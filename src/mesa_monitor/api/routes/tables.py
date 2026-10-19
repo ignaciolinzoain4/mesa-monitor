@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from mesa_monitor.api.deps import AdminUser, AuthUser, CurrentUser, DbSession
+from mesa_monitor.api.deps import AdminUser, AnyPrincipal, AuthUser, CurrentUser, DbSession
 from mesa_monitor.api.schemas import TableIn, TableLayoutItem, TableOut, TablePatch
 from mesa_monitor.core.ids import new_id
 from mesa_monitor.db.audit import CHANNEL_CONFIG, Actor, notify, record_audit
@@ -68,7 +68,8 @@ async def _flush(db: AsyncSession) -> None:
 
 
 @router.get("", response_model=list[TableOut])
-async def list_tables(db: DbSession, _: AuthUser) -> list[TableOut]:
+async def list_tables(db: DbSession, _: AnyPrincipal) -> list[TableOut]:
+    """Mesas con su ubicación en el plano (también para las PCs de tiqueo)."""
     tables = (await db.execute(select(Table).order_by(Table.sector, Table.label))).scalars().all()
     cams = await _camera_ids(db)
     return [_out(t, cams) for t in tables]
