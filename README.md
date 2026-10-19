@@ -129,6 +129,7 @@ cantidad de personas, y el personal resaltado. Los videos nunca se suben al repo
 
 | Para | Documento |
 |---|---|
+| Qué hicimos, dónde estamos, a dónde vamos | [docs/estado-del-proyecto.md](docs/estado-del-proyecto.md) |
 | Instalar (Windows/Linux, GPU, benchmark) | [docs/instalacion.md](docs/instalacion.md) |
 | Calibrar zonas, perfil de personal y postura | [docs/calibracion.md](docs/calibracion.md) |
 | Medir la precisión y ajustar | [docs/ajuste.md](docs/ajuste.md) |
