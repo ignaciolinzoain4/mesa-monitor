@@ -18,7 +18,7 @@ export function LivePage() {
   const now = useNow(1000)
   const [tables, setTables] = useState<Table[]>([])
   const [selected, setSelected] = useState<string | null>(null)
-  const [debug, setDebug] = useState(false)
+  const [view, setView] = useState<'snapshot' | 'live' | 'debug'>('snapshot')
   const [snapKey, setSnapKey] = useState(() => Date.now())
   const [error, setError] = useState<unknown>(null)
 
@@ -127,8 +127,11 @@ export function LivePage() {
                     <Button variant="secondary" onClick={() => setSnapKey(Date.now())}>
                       Actualizar imagen
                     </Button>
-                    <Button variant={debug ? 'primary' : 'secondary'} onClick={() => setDebug(!debug)}>
-                      {debug ? 'Ocultar overlay de debug' : 'Ver overlay de debug'}
+                    <Button variant={view === 'live' ? 'primary' : 'secondary'} onClick={() => setView(view === 'live' ? 'snapshot' : 'live')}>
+                      Video en vivo
+                    </Button>
+                    <Button variant={view === 'debug' ? 'primary' : 'secondary'} onClick={() => setView(view === 'debug' ? 'snapshot' : 'debug')}>
+                      Overlay de debug
                     </Button>
                   </div>
                   <div className="grid gap-2 md:grid-cols-2">
@@ -137,11 +140,13 @@ export function LivePage() {
                         <img
                           className="max-h-[50vh] w-full rounded bg-black object-contain"
                           alt={`Cámara ${cid}`}
-                          src={mediaUrl(debug ? `/cameras/${cid}/debug.mjpeg` : `/cameras/${cid}/snapshot?stream=main&_=${snapKey}`)}
+                          src={mediaUrl(
+                            view === 'debug' ? `/cameras/${cid}/debug.mjpeg` : view === 'live' ? `/cameras/${cid}/live.mjpeg` : `/cameras/${cid}/snapshot?stream=main&_=${snapKey}`,
+                          )}
                         />
                         <figcaption className="text-xs text-slate-500">
                           {live.cameras[cid]?.name ?? cid}
-                          {debug && ' — overlay (si no se ve, activalo en Configuración → Visión)'}
+                          {view === 'debug' && ' — overlay (si no se ve, activalo en Configuración → Visión)'}
                         </figcaption>
                       </figure>
                     ))}

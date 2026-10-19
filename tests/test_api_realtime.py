@@ -333,3 +333,12 @@ async def test_webhook_failed_after_max_attempts(clean_db: str, tmp_path: Path) 
             row = (await db.execute(select(WebhookDelivery))).scalar_one()
         assert row.status is DeliveryStatus.FAILED
         assert row.attempts == MAX_ATTEMPTS
+
+
+async def test_alert_screen_settings_follow_threshold(clean_db: str, tmp_path: Path) -> None:
+    async with api(clean_db, tmp_path) as c:
+        assert (await c.get("/alerts/screen-settings")).json() == {"sound_repeat_s": 60.0}
+        await c.put("/config/thresholds", json=[{"key": "alert_sound_repeat_s", "value": 20}])
+        dev = (await c.post("/device-tokens", json={"name": "PC"})).json()
+        c.headers["Authorization"] = f"Bearer {dev['token']}"
+        assert (await c.get("/alerts/screen-settings")).json() == {"sound_repeat_s": 20.0}

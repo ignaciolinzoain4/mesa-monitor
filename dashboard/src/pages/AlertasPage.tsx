@@ -11,7 +11,6 @@ import { enableSound, playAlert, soundEnabled } from '../lib/sound'
 import type { AlertData, Table } from '../lib/types'
 
 const DEVICE_KEY = 'mesa-monitor.device'
-const REPEAT_MS = 60_000
 
 function readDeviceToken(): string | null {
   const fromUrl = new URLSearchParams(location.search).get('token')
@@ -90,11 +89,15 @@ export function AlertasPage() {
   const [sound, setSound] = useState(soundEnabled())
   const [notify, setNotify] = useState(() => typeof Notification !== 'undefined' && Notification.permission === 'granted')
   const [authError, setAuthError] = useState<string | null>(null)
+  const [repeatMs, setRepeatMs] = useState(60_000)
   const lastPlayed = useRef<Record<string, number>>({})
   const seen = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     if (!token) return
+    call<{ sound_repeat_s: number }>(token, '/alerts/screen-settings')
+      .then((s) => setRepeatMs(Math.max(10, s.sound_repeat_s) * 1000))
+      .catch(() => undefined)
     call<Table[]>(token, '/tables')
       .then(setTables)
       .catch((e: unknown) => {
@@ -114,12 +117,12 @@ export function AlertasPage() {
   const needsAttention = (a: AlertData) =>
     a.status === 'open' && !(a.snoozed_until && Date.parse(a.snoozed_until) > now)
 
-  // Sonido: al aparecer una alerta y cada REPEAT_MS mientras no se reconozca ni posponga.
+  // Sonido: al aparecer una alerta y cada `repeatMs` (configurable) mientras no se reconozca ni posponga.
   useEffect(() => {
     for (const a of alerts) {
       if (!needsAttention(a)) continue
       const last = lastPlayed.current[a.alert_id] ?? 0
-      if (now - last >= REPEAT_MS) {
+      if (now - last >= repeatMs) {
         playAlert(a.severity)
         lastPlayed.current[a.alert_id] = now
       }

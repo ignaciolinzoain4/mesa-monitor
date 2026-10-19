@@ -12,10 +12,25 @@ from mesa_monitor.api.publish import publish
 from mesa_monitor.api.state_view import alert_data
 from mesa_monitor.core.enums import AlertStatus
 from mesa_monitor.core.events import AlertData
+from mesa_monitor.core.thresholds import ThresholdRow, resolve
 from mesa_monitor.db.audit import record_audit
-from mesa_monitor.db.models import Alert, Table
+from mesa_monitor.db.models import Alert, Table, Threshold
 
 router = APIRouter(prefix="/alerts", tags=["alerts"])
+
+
+class AlertScreenSettings(BaseModel):
+    sound_repeat_s: float
+
+
+@router.get("/screen-settings", response_model=AlertScreenSettings)
+async def screen_settings(db: DbSession, _: AnyPrincipal) -> AlertScreenSettings:
+    """Parámetros de la pantalla /alertas (los dispositivos no pueden leer todos los umbrales)."""
+    rows = [
+        ThresholdRow(r.scope, r.scope_ref, r.key, r.value, r.valid_from, r.valid_to)
+        for r in (await db.execute(select(Threshold))).scalars()
+    ]
+    return AlertScreenSettings(sound_repeat_s=float(resolve(rows)["alert_sound_repeat_s"]))
 
 
 @router.get("", response_model=list[AlertData])

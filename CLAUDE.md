@@ -40,6 +40,9 @@ Las decisiones marcadas **[DECIDIDO]** no se discuten sin un impedimento técnic
 ## Comandos
 ```sh
 make sync                 # uv sync --extra vision --extra cpu  (cpu y cuda son excluyentes)
+uv run python tools/replay.py VIDEO --zones respaldo.yaml --camera ID --annotate   # probar con video
+uv run python tools/evaluate.py data/replay/X/events.jsonl anotaciones.csv        # precisión
+uv run python tools/demo_data.py --days 14   # datos SINTÉTICOS para el dashboard (--clear borra)
 make check                # lint + mypy + tests + licencias + dashboard
 make api                  # API en :8000 con reload (necesita DATABASE_URL)
 make dashboard-dev        # Vite en :5173, proxy de /api a :8000
@@ -72,4 +75,23 @@ veces; el hook `tools/fix_enum_checks.py` (configurado en alembic.ini) deja solo
 - La escalada warning→critical ignora "Visto" y "Posponer". El SLA usa el `U_1` efectivo de cada mesa.
 - Cámaras fuera del NVR: `cameras.stream_url_template` propio por cámara.
 - Video en vivo: MSE/MJPEG por HTTP por defecto; WebRTC opcional (en Docker Desktop/Windows necesita UDP + candidates).
-- La UI de go2rtc no tiene login: se publica solo en `127.0.0.1`.
+- La UI de go2rtc no tiene login: se publica solo en `127.0.0.1`. La API reexpone snapshot y video
+  en vivo (`/cameras/{id}/snapshot`, `/live.mjpeg`) con su propia autenticación.
+- La autenticación mínima (JWT + admin inicial) se adelantó a F1 para que los snapshots no queden abiertos.
+- Credenciales: JWT (dashboard), `X-API-Key: mm_...` (integraciones), `Bearer mmd_...` (dispositivos
+  de /alertas, con PIN de 6 dígitos canjeable). `?access_token=` solo en GET (para `<img>`/MJPEG).
+- Eventos: el worker y la API escriben en la tabla `events` + `NOTIFY mesa_events {id}`; el
+  `EventsHub` de la API (un solo proceso) los difunde por WebSocket y encola webhooks.
+
+## Trampas conocidas (aprendidas con video real)
+- **Detección por mosaicos**: con cámaras gran angular en altura la imagen entera pierde a la mayoría
+  de las personas (15 vs 41 en un video real). `TilingParams` + ROI de las zonas dibujadas.
+- **Postura**: alto/ancho sola no alcanza en altura (sentados 1.3–2.8, parados 2.9–3.9); se combina
+  con movimiento (`MotionTracker`). Umbral configurable por instalación (Configuración → Visión).
+- **Clasificador**: no olvidar tracks por perder 1–2 frames (el mozo "parpadeaba" a cliente);
+  "visitó 2 mesas" exige permanencia (el ancla oscila entre asientos vecinos).
+- **go2rtc** responde 200 con cuerpo vacío si la cámara está caída (`Go2rtcClient` valida el JPEG).
+- **Dahua .dav**: el pts es hora LOCAL guardada como epoch UTC (`file_frames(pts_tz=...)`).
+- **macOS**: uv marca los `.pth` del venv como ocultos → usar `PYTHONPATH=src` (Makefile).
+- **Docker local en Mac**: colima + `docker-buildx` (BuildKit). Sin `credsStore: desktop`.
+- A 0,6 fps (Mac sin GPU) casi no se detectan visitas: el mozo pasa entre frames. Apuntar a ≥ 2 fps.

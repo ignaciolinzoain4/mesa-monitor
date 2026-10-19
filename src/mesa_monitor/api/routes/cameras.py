@@ -6,7 +6,7 @@ alta/baja de cámaras desde la API: se edita el YAML y se reinicia `go2rtc-confi
 
 from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Any
 
 import httpx
 from fastapi import APIRouter, HTTPException, Query, Request, Response, status
@@ -15,7 +15,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from mesa_monitor.api.camera_monitor import CameraMonitor
-from mesa_monitor.api.deps import AdminUser, DbSession
+from mesa_monitor.api.deps import AdminUser, AuthUser, DbSession
 from mesa_monitor.core.enums import CameraStatus
 from mesa_monitor.db.models import Camera
 from mesa_monitor.vision.go2rtc import Go2rtcClient, SnapshotError, StreamKind
@@ -106,28 +106,19 @@ async def get_snapshot(
     return Response(frame.jpeg, media_type="image/jpeg", headers=headers)
 
 
-@router.get(
-    "/{camera_id}/debug.mjpeg", responses={200: {"content": {"multipart/x-mixed-replace": {}}}}
-)
-async def debug_stream(camera_id: str, request: Request, db: DbSession, _: AdminUser) -> Response:
-    """Overlay de debug del worker (cajas, tracks, personal/cliente, zonas). Apagado por defecto:
-    se activa en Configuración → Visión. Solo para calibrar; no se graba."""
-    if await db.get(Camera, camera_id) is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Cámara inexistente")
-    url = f"{request.app.state.settings.worker_debug_url}/debug/{camera_id}.mjpeg"
+async def _proxy_mjpeg(url: str, not_ok_detail: str) -> Response:
     client = httpx.AsyncClient(timeout=httpx.Timeout(10.0, read=None))
     try:
         upstream = await client.send(client.build_request("GET", url), stream=True)
     except httpx.HTTPError as exc:
         await client.aclose()
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, detail="El worker no responde") from exc
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY, detail="El servicio de video no responde"
+        ) from exc
     if upstream.status_code != 200:
         await upstream.aclose()
         await client.aclose()
-        raise HTTPException(
-            status.HTTP_409_CONFLICT,
-            detail="El overlay de debug está desactivado (Configuración → Visión)",
-        )
+        raise HTTPException(status.HTTP_409_CONFLICT, detail=not_ok_detail)
 
     async def body() -> AsyncIterator[bytes]:
         try:
@@ -138,3 +129,27 @@ async def debug_stream(camera_id: str, request: Request, db: DbSession, _: Admin
             await client.aclose()
 
     return StreamingResponse(body(), media_type=upstream.headers.get("content-type"))
+
+
+MJPEG: dict[int | str, dict[str, Any]] = {200: {"content": {"multipart/x-mixed-replace": {}}}}
+
+
+@router.get("/{camera_id}/debug.mjpeg", responses=MJPEG)
+async def debug_stream(camera_id: str, request: Request, db: DbSession, _: AdminUser) -> Response:
+    """Overlay de debug del worker (cajas, tracks, personal/cliente, zonas). Apagado por defecto:
+    se activa en Configuración → Visión. Solo para calibrar; no se graba."""
+    if await db.get(Camera, camera_id) is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Cámara inexistente")
+    url = f"{request.app.state.settings.worker_debug_url}/debug/{camera_id}.mjpeg"
+    return await _proxy_mjpeg(url, "El overlay de debug está desactivado (Configuración → Visión)")
+
+
+@router.get("/{camera_id}/live.mjpeg", responses=MJPEG)
+async def live_stream(camera_id: str, request: Request, db: DbSession, _: AuthUser) -> Response:
+    """Video en vivo (substream) desde go2rtc, con la autenticación de la API: go2rtc no tiene
+    login y solo escucha en la misma PC. No se graba."""
+    cam = await db.get(Camera, camera_id)
+    if cam is None or not cam.enabled:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail="Cámara inexistente o deshabilitada")
+    url = f"{request.app.state.settings.go2rtc_url}/api/stream.mjpeg?src={camera_id}"
+    return await _proxy_mjpeg(url, "go2rtc no pudo abrir la cámara")
