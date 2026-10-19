@@ -112,6 +112,8 @@ jobs:
           curl --fail --silent --show-error http://localhost:8000/api/v1/auth/login \
             -H 'content-type: application/json' -d '{"username":"admin","password":"cambiame"}' \
             | grep -q access_token
+      - name: El worker importa la pila de visión
+        run: docker compose exec -T worker-cpu python -c "import torch, rfdetr, trackers, cv2; print(torch.__version__, cv2.__version__)"
       - name: Logs
         if: always()
         run: docker compose logs --no-color

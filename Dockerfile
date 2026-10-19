@@ -45,6 +45,10 @@ ENTRYPOINT ["/usr/local/bin/api-entrypoint.sh"]
 FROM python-base AS worker
 ARG TORCH_VARIANT=cpu
 ENV RF_HOME=/models
+# opencv-python (dependencia de `trackers`) necesita estas librerías del sistema.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libxcb1 libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
 COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-install-project --extra vision --extra ${TORCH_VARIANT}
