@@ -26,14 +26,41 @@ services:
       retries: 20
     # Sin puertos publicados: la base nunca se expone fuera de Docker.
 
+  # Genera la config de go2rtc desde config/local/cameras.yaml (con las credenciales del .env)
+  # en un volumen interno. Después de editar cameras.yaml:
+  #   docker compose up -d --force-recreate go2rtc-config go2rtc
+  go2rtc-config:
+    build:
+      context: .
+      target: api
+    image: mesa-monitor-api:local
+    restart: "no"
+    env_file:
+      - path: .env
+        required: false
+    command:
+      - python
+      - -m
+      - mesa_monitor.vision.go2rtc
+      - --cameras=/app/config/local/cameras.yaml
+      - --out=/go2rtc/go2rtc.yaml
+      - --allow-missing
+    entrypoint: []
+    volumes:
+      - ./config/local:/app/config/local:ro
+      - go2rtc-config:/go2rtc
+
   go2rtc:
     image: alexxit/go2rtc:1.9.14
     restart: unless-stopped
     volumes:
-      - ./docker/go2rtc/go2rtc.yaml:/config/go2rtc.yaml:ro
+      - go2rtc-config:/config:ro
     ports:
       # La UI/API de go2rtc no tiene login: solo accesible desde la misma PC.
       - "127.0.0.1:1984:1984"
+    depends_on:
+      go2rtc-config:
+        condition: service_completed_successfully
 
   api:
     build:
@@ -52,6 +79,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      go2rtc:
+        condition: service_started
 
   worker-cpu:
     profiles: [cpu]
@@ -67,7 +96,8 @@ services:
         required: false
     environment: *app-env
     volumes:
-      - ./config/local:/app/config/local:ro
+      - ./config/local:/app/config/local  # escribe recommended.yaml (benchmark)
+      - models:/models
     depends_on:
       db:
         condition: service_healthy
@@ -88,7 +118,8 @@ services:
         required: false
     environment: *app-env
     volumes:
-      - ./config/local:/app/config/local:ro
+      - ./config/local:/app/config/local
+      - models:/models
     deploy:
       resources:
         reservations:
@@ -104,3 +135,5 @@ services:
 
 volumes:
   pgdata:
+  go2rtc-config:
+  models:  # pesos de RF-DETR descargados (no se bajan en cada arranque)

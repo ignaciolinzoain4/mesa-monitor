@@ -1,11 +1,12 @@
 # Atajos de desarrollo (macOS/Linux). En Windows, usar los comandos `uv ...` de CLAUDE.md.
-.PHONY: sync lint format typecheck test licenses check dashboard-check api dashboard-dev up down
+.PHONY: sync go2rtc-config benchmark lint format typecheck test licenses check dashboard-check api dashboard-dev up down
 
-# Python 3.12 ignora archivos .pth con la marca "hidden" de macOS (pasa en carpetas como
-# ~/Documents). Sin esto, `import mesa_monitor` falla fuera de pytest/alembic.
+# En macOS, Python 3.12 ignora los .pth del venv marcados "hidden" (uv los vuelve a marcar en
+# carpetas como ~/Documents) y `import mesa_monitor` falla. PYTHONPATH=src lo evita siempre.
+export PYTHONPATH := src
+
 sync:
-	uv sync --all-extras
-	-@[ "$$(uname)" = "Darwin" ] && chflags nohidden .venv/lib/python*/site-packages/*.pth
+	uv sync --extra vision --extra cpu
 
 lint:
 	uv run --no-sync ruff check .
@@ -34,6 +35,12 @@ api:
 
 dashboard-dev:
 	cd dashboard && npm run dev
+
+go2rtc-config:
+	uv run --no-sync python -m mesa_monitor.vision.go2rtc
+
+benchmark:
+	uv run --no-sync python tools/benchmark.py --go2rtc-url http://localhost:1984
 
 up:
 	docker compose up -d --build

@@ -15,7 +15,7 @@ Incluye un panel de análisis y una API para conectarlo con el sistema de gesti�
 | Fase | Contenido | Estado |
 |---|---|---|
 | F0 | Esqueleto: Docker Compose, Postgres + migraciones, API `/health`, dashboard vacío, CI | ✅ |
-| F1 | Ingesta de cámaras (go2rtc), snapshots, benchmark de hardware | Pendiente |
+| F1 | Ingesta de cámaras (go2rtc), snapshots, benchmark de hardware | ✅ |
 | F2 | Editor de zonas y plano del salón | Pendiente |
 | F3 | Detección + tracking + overlay + replay de video | Pendiente |
 | F4 | Máquina de estados de mesa + clasificador de mozos | Pendiente |
@@ -27,12 +27,12 @@ Incluye un panel de análisis y una API para conectarlo con el sistema de gesti�
 
 ## Instalación rápida (Docker)
 
-Requisitos: Docker (en Windows: Docker Desktop con WSL2). Para usar placa de video NVIDIA hace
-falta además el soporte de GPU de Docker (se documenta en F1).
+Guía completa (Windows con GPU, Linux, cámaras, benchmark): [docs/instalacion.md](docs/instalacion.md).
 
 ```sh
-cp .env.example .env      # completar contraseñas
-docker compose up -d
+cp .env.example .env                                   # completar contraseñas y JWT_SECRET
+cp config/example/cameras.yaml config/local/cameras.yaml   # completar canales
+docker compose up -d --build
 ```
 
 Abrir <http://localhost:8000>. El estado del servidor está en <http://localhost:8000/api/v1/health>

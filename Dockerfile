@@ -32,6 +32,8 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable
 COPY --from=dashboard /app/dashboard/dist /app/dashboard/dist
 COPY docker/api-entrypoint.sh /usr/local/bin/api-entrypoint.sh
+# Destino de la config generada de go2rtc (volumen compartido con el contenedor go2rtc).
+RUN mkdir -p /go2rtc && chown mesa:mesa /go2rtc
 USER mesa
 EXPOSE 8000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 \
@@ -39,14 +41,17 @@ HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=5 \
 ENTRYPOINT ["/usr/local/bin/api-entrypoint.sh"]
 
 # ---------------------------------------------------------------- worker
-# F3 agrega el extra `vision` (torch + rfdetr + trackers). TORCH_VARIANT elegirá CPU o CUDA.
+# TORCH_VARIANT: "cpu" o "cuda" (extras de pyproject.toml).
 FROM python-base AS worker
 ARG TORCH_VARIANT=cpu
+ENV RF_HOME=/models
 COPY pyproject.toml uv.lock README.md ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-install-project --extra vision
+    uv sync --frozen --no-dev --no-install-project --extra vision --extra ${TORCH_VARIANT}
 COPY src/ src/
+COPY tools/ tools/
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev --no-editable --extra vision
+    uv sync --frozen --no-dev --no-editable --extra vision --extra ${TORCH_VARIANT}
+RUN mkdir -p /models /app/config/local && chown -R mesa:mesa /models /app/config
 USER mesa
 CMD ["python", "-m", "mesa_monitor.vision"]

@@ -1,0 +1,139 @@
+"""Carga de `config/local/cameras.yaml`: conexiones (NVR u otras) y cámaras.
+
+Los valores `${VAR}` / `${VAR:-default}` se reemplazan por variables de entorno, así las
+credenciales quedan en `.env` y nunca en el YAML.
+"""
+
+import os
+import re
+from pathlib import Path
+from typing import Annotated, Any, Self
+from urllib.parse import quote
+
+import yaml
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints, model_validator
+
+DAHUA_URL_TEMPLATE = (
+    "rtsp://{user}:{password}@{host}:{port}/cam/realmonitor?channel={channel}&subtype={subtype}"
+)
+SUBSTREAM = 1
+MAIN_STREAM = 0
+
+_ENV_REF = re.compile(r"\$\{([A-Z0-9_]+)(?::-([^}]*))?\}")
+
+CameraId = Annotated[str, StringConstraints(pattern=r"^[a-z0-9][a-z0-9_-]{0,47}$")]
+
+
+class CamerasConfigError(ValueError):
+    """Error de configuración con mensaje entendible para el usuario."""
+
+
+class Connection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    host: str
+    port: int = 554
+    user: str = ""
+    password: SecretStr = SecretStr("")
+    url_template: str = DAHUA_URL_TEMPLATE
+
+    def url(self, channel: int | None, subtype: int) -> str:
+        # Usuario y clave se escapan: una clave con "@" o ":" rompería la URL RTSP.
+        return self.url_template.format(
+            user=quote(self.user, safe=""),
+            password=quote(self.password.get_secret_value(), safe=""),
+            host=self.host,
+            port=self.port,
+            channel="" if channel is None else channel,
+            subtype=subtype,
+        )
+
+
+class Camera(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: CameraId
+    name: str
+    enabled: bool = True
+    connection: str | None = "nvr"
+    channel: int | None = Field(default=None, ge=1, le=64)
+    # Fuente go2rtc literal (ej. un video de prueba). Si está, se ignoran connection/channel.
+    source: str | None = None
+    fps_detection: float = Field(default=3.0, gt=0, le=15)
+    expected_resolution: tuple[int, int] | None = None
+
+    @model_validator(mode="after")
+    def _source_or_channel(self) -> Self:
+        if self.source is None and self.connection is None:
+            raise ValueError("cada cámara necesita `connection` o `source`")
+        return self
+
+
+class CamerasFile(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    connections: dict[str, Connection] = Field(default_factory=dict)
+    cameras: list[Camera] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _check_refs(self) -> Self:
+        seen: set[str] = set()
+        for cam in self.cameras:
+            if cam.id in seen:
+                raise ValueError(f"id de cámara repetido: {cam.id!r}")
+            seen.add(cam.id)
+            if cam.source is None and cam.connection not in self.connections:
+                raise ValueError(
+                    f"la cámara {cam.id!r} usa la conexión {cam.connection!r}, "
+                    "que no está definida en `connections`"
+                )
+        return self
+
+    def stream_url(self, cam: Camera, subtype: int) -> str:
+        """URL de origen para go2rtc. Contiene credenciales: no loguear (usar `redact_url`)."""
+        if cam.source is not None:
+            return cam.source
+        if cam.connection is None:  # imposible: lo garantiza Camera._source_or_channel
+            raise CamerasConfigError(f"la cámara {cam.id!r} no tiene conexión")
+        return self.connections[cam.connection].url(cam.channel, subtype)
+
+
+def _expand_env(value: Any, env: dict[str, str]) -> Any:
+    if isinstance(value, str):
+
+        def repl(m: re.Match[str]) -> str:
+            name, default = m.group(1), m.group(2)
+            if name in env:
+                return env[name]
+            if default is not None:
+                return default
+            raise CamerasConfigError(f"Falta la variable {name} en el archivo .env")
+
+        return _ENV_REF.sub(repl, value)
+    if isinstance(value, dict):
+        return {k: _expand_env(v, env) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_expand_env(v, env) for v in value]
+    return value
+
+
+def parse_cameras(text: str, env: dict[str, str] | None = None) -> CamerasFile:
+    raw = yaml.safe_load(text) or {}
+    expanded = _expand_env(raw, dict(os.environ) if env is None else env)
+    try:
+        return CamerasFile.model_validate(expanded)
+    except ValueError as exc:
+        raise CamerasConfigError(f"cameras.yaml inválido: {exc}") from exc
+
+
+def load_cameras(path: Path, env: dict[str, str] | None = None) -> CamerasFile:
+    if not path.is_file():
+        raise CamerasConfigError(
+            f"No existe {path}. Copiá config/example/cameras.yaml a config/local/ y completalo."
+        )
+    return parse_cameras(path.read_text(encoding="utf-8"), env)
+
+
+def redact_url(url: str) -> str:
+    """Oculta usuario y clave de una URL para poder mostrarla o loguearla."""
+    return re.sub(r"(://)[^/@\s]+@", r"\1***@", url)

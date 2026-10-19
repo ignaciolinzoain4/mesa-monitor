@@ -1,0 +1,39 @@
+# Cámaras del local. Copiar a config/local/cameras.yaml y completar.
+# Las credenciales NO van acá: se toman del .env con ${VARIABLE}.
+
+connections:
+  # Grabador Dahua (NVR). La plantilla de URL es la de Dahua por defecto.
+  nvr:
+    host: ${NVR_HOST}
+    port: ${NVR_PORT:-554}
+    user: ${NVR_USER}
+    password: ${NVR_PASSWORD}
+    # url_template: "rtsp://{user}:{password}@{host}:{port}/cam/realmonitor?channel={channel}&subtype={subtype}"
+
+  # Ejemplo de cámara IP conectada directo (no por el NVR): agregar CAM10_* al .env.
+  # galeria_ip:
+  #   host: ${CAM10_HOST}
+  #   user: ${CAM10_USER}
+  #   password: ${CAM10_PASSWORD}
+
+cameras:
+  - id: salon-1
+    name: Salón principal (fondo)
+    channel: 1
+    fps_detection: 3
+    # Resolución esperada del substream (ancho, alto). Se avisa si no coincide.
+    expected_resolution: [704, 480]
+
+  - id: salon-2
+    name: Salón principal (entrada)
+    channel: 2
+
+  - id: galeria
+    name: Galería sillones
+    channel: 5
+    enabled: false
+
+  # Cámara simulada para probar sin el NVR (genera una imagen de prueba con ffmpeg):
+  # - id: prueba
+  #   name: Cámara de prueba
+  #   source: "ffmpeg:virtual?video=testsrc&size=704x480#video=h264"

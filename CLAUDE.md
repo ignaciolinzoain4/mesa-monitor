@@ -34,12 +34,14 @@ Las decisiones marcadas **[DECIDIDO]** no se discuten sin un impedimento técnic
 
 ## Comandos
 ```sh
-make sync                 # uv sync --all-extras (+ arreglo de .pth ocultos en macOS)
+make sync                 # uv sync --extra vision --extra cpu  (cpu y cuda son excluyentes)
 make check                # lint + mypy + tests + licencias + dashboard
 make api                  # API en :8000 con reload (necesita DATABASE_URL)
 make dashboard-dev        # Vite en :5173, proxy de /api a :8000
 docker compose up -d      # stack completo (perfil según COMPOSE_PROFILES en .env)
 ```
+En macOS uv marca los `.pth` del venv como ocultos y Python 3.12 los ignora: los comandos sueltos
+necesitan `PYTHONPATH=src` (el Makefile ya lo exporta; pytest y alembic lo configuran solos).
 Sin make (Windows): `uv run ruff check .`, `uv run ruff format --check .`, `uv run mypy`,
 `uv run pytest`, `uv run python tools/check_licenses.py`.
 

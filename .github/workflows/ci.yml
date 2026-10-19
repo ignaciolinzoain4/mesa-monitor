@@ -35,7 +35,7 @@ jobs:
         with:
           version: "0.13.1"
           enable-cache: true
-      - run: uv sync --frozen --all-extras
+      - run: uv sync --frozen --extra vision --extra cpu
       - name: Ruff
         run: |
           uv run ruff check .
@@ -84,11 +84,19 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - run: cp .env.example .env
+      - name: .env de prueba
+        run: |
+          cp .env.example .env
+          sed -i "s|^JWT_SECRET=.*|JWT_SECRET=$(openssl rand -hex 32)|" .env
       - name: Levantar el stack
         run: docker compose up -d --build --wait --wait-timeout 300
       - name: Health
         run: curl --fail --silent --show-error http://localhost:8000/api/v1/health
+      - name: Login con el admin inicial
+        run: |
+          curl --fail --silent --show-error http://localhost:8000/api/v1/auth/login \
+            -H 'content-type: application/json' -d '{"username":"admin","password":"cambiame"}' \
+            | grep -q access_token
       - name: Logs
         if: always()
         run: docker compose logs --no-color

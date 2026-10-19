@@ -52,17 +52,16 @@ Polygon = list[list[float]]
 
 
 class Camera(TimestampMixin, Base):
-    """Cámara. La conexión real (host/credenciales) sale de `.env` + `cameras.yaml`."""
+    """Espejo de `cameras.yaml` (la fuente de verdad). Las credenciales nunca llegan a la base."""
 
     __tablename__ = "cameras"
 
     id: Mapped[str] = mapped_column(String(64), primary_key=True)  # slug, ej. "cam1"
     name: Mapped[str] = mapped_column(String(120))
     enabled: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    # Nombre de la conexión en cameras.yaml (NULL = fuente literal, ej. video de prueba).
+    connection: Mapped[str | None] = mapped_column(String(64))
     channel: Mapped[int | None] = mapped_column(SmallInteger)
-    # Plantilla propia para cámaras que no van por el NVR. Usa {user}/{password}/{host}...,
-    # nunca credenciales literales.
-    stream_url_template: Mapped[str | None] = mapped_column(Text)
     fps_detection: Mapped[float] = mapped_column(Float, server_default=text("3"))
     expected_width: Mapped[int | None] = mapped_column(Integer)
     expected_height: Mapped[int | None] = mapped_column(Integer)

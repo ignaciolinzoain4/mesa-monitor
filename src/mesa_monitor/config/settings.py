@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     dashboard_dist: Path = Path("dashboard/dist")
     go2rtc_url: str = "http://go2rtc:1984"
 
+    jwt_ttl_minutes: int = 12 * 60
+    # Monitor de cámaras: cada cuánto se pide un frame y a partir de cuándo se considera caída.
+    camera_probe_interval_s: float = 10.0
+    camera_offline_after_s: float = 30.0
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def _split_origins(cls, value: object) -> object:
