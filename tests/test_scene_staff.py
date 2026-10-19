@@ -1,5 +1,6 @@
 """Análisis de escena, clasificador de personal y perfil de color (sin modelos)."""
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 import numpy as np
@@ -70,7 +71,7 @@ def test_counts_seated_customers_objects_and_ignores_masks() -> None:
         objects=[Box(0.15, 0.15, 0.18, 0.18, label="cup"), Box(0.5, 0.5, 0.52, 0.52, label="cup")],
         ts=T0,
         classifier=clf,
-        posture=POSTURE,
+        posture=replace(POSTURE, seat_dwell_s=0),
     )
     assert res.tables["t1"] == TableCounts(
         seated_customers=2, staff_present=False, object_count=1, present_customers=2
@@ -288,3 +289,15 @@ def test_far_tables_accept_weaker_object_detections() -> None:
     cup = Box(0.12, 0.12, 0.13, 0.13, confidence=0.27, label="cup")
     res = analyze_frame(zones, [], [cup], T0, HeuristicStaffClassifier(), POSTURE)
     assert res.tables["chica"].object_count == 1
+
+
+def test_a_box_that_appears_for_an_instant_does_not_occupy_a_table() -> None:
+    """Media persona en el borde de un mosaico o alguien de la mesa de atrás: no ocupa."""
+    clf = HeuristicStaffClassifier()
+    flash = analyze_frame(ZONES, [seated(0.15, 0.35, 40)], [], T0, clf, POSTURE)
+    assert flash.tables["t1"].seated_customers == 0
+    for i in range(1, 4):
+        res = analyze_frame(
+            ZONES, [seated(0.15, 0.35, 40)], [], T0 + timedelta(seconds=i), clf, POSTURE
+        )
+    assert res.tables["t1"].seated_customers == 1

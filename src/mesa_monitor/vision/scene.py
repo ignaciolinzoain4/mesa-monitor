@@ -171,6 +171,9 @@ class PostureParams:
     motion_window_s: float = 3.0
     still_speed: float = 0.012  # por debajo de esto (y con ≥ `still_min_s` de historia): quieto
     still_min_s: float = 2.0
+    # Para contar como sentado en una mesa hay que estar ahí esto: una caja que aparece un
+    # instante (media persona en el borde de un mosaico, alguien de la mesa de atrás) no ocupa.
+    seat_dwell_s: float = 2.0
     frame_aspect: float = 16 / 9  # ancho/alto del frame en píxeles reales (corrige substreams D1)
 
 
@@ -303,7 +306,15 @@ def analyze_frame(
     obj_list = [o for o in objects if not zones.masked(*o.center)]
     for v in zones.views:
         seated = sum(
-            1 for p in people if p.table_id == v.table_id and p.seated_like and not p.is_staff
+            1
+            for p in people
+            if p.table_id == v.table_id
+            and p.seated_like
+            and not p.is_staff
+            and (
+                p.box.track_id is None
+                or classifier.table_dwell_s(p.box.track_id, ts) >= posture.seat_dwell_s
+            )
         )
         # Para el vaciado cuentan los sentados (o quietos en una silla); alguien parado en la
         # zona de asientos (un vecino, alguien de paso) no mantiene ocupada la mesa.

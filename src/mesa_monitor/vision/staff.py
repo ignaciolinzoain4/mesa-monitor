@@ -89,6 +89,8 @@ class StaffClassifier(Protocol):
 
     def forget(self, active_track_ids: set[int], now: datetime | None = None) -> None: ...
 
+    def table_dwell_s(self, track_id: int, now: datetime) -> float: ...
+
 
 # Ropa oscura sin perfil calibrado: fracción de píxeles oscuros del torso.
 DARK_V = 70  # brillo (0–255) por debajo del cual un píxel es "oscuro"
@@ -296,6 +298,13 @@ class HeuristicStaffClassifier:
                 continue
             if now is None or (now - t.last_seen).total_seconds() > self.forget_after_s:
                 del self._tracks[tid]
+
+    def table_dwell_s(self, track_id: int, now: datetime) -> float:
+        """Segundos que el track lleva en los asientos de su mesa actual (0 si no está en una)."""
+        t = self._tracks.get(track_id)
+        if t is None or t.at_table is None or t.at_table_since is None:
+            return 0.0
+        return (now - t.at_table_since).total_seconds()
 
     def debug_score(self, track_id: int) -> float | None:
         t = self._tracks.get(track_id)
