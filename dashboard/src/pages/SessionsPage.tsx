@@ -9,7 +9,9 @@ type Session = {
   table: { id: string; label: string; sector: string }
   business_date: string
   seated_at: string
+  partial: boolean
   first_attention_at: string | null
+  served_at: string | null
   vacated_at: string | null
   cleaned_at: string | null
   closed_at: string | null
@@ -45,8 +47,9 @@ function Timeline({ s, now }: { s: Detail; now: number }) {
   const span = Math.max(60_000, end - start)
   const x = (iso: string) => `${Math.min(100, Math.max(0, ((Date.parse(iso) - start) / span) * 100))}%`
   const marks: [string | null, string, string][] = [
-    [s.seated_at, 'Se sientan', 'bg-amber-400'],
+    [s.seated_at, s.partial ? 'Ya estaban (inicio del registro)' : 'Se sientan', 'bg-amber-400'],
     [s.first_attention_at, 'Primera atención', 'bg-sky-400'],
+    [s.served_at, 'Consumiendo', 'bg-cyan-400'],
     [s.vacated_at, 'Se van', 'bg-violet-400'],
     [s.cleaned_at, 'Limpia', 'bg-emerald-400'],
   ]

@@ -46,6 +46,22 @@ de cada uno y "Calcular y activar". El resultado dice si el color de la ropa alc
 - **insuficiente**: con ropa negra pasa seguido (muchos clientes visten oscuro). La solución más
   efectiva es un **distintivo de color** (delantal o remera de un color llamativo) y recalibrar.
 
+Sin perfil calibrado, el sistema asume **ropa oscura** (mozos de negro). El color nunca decide solo:
+se combina con estas reglas, aprendidas con video real de un café:
+
+- **Sentado en una mesa = cliente.** Quien se sienta en los asientos de una mesa (o se queda quieto
+  en una silla aunque la cámara lo vea "alargado") deja de poder ser mozo.
+- **La barra cuenta si se queda.** Hay que estar parado unos segundos en la zona de personal; un
+  cliente que pasa o se acerca a pagar no se marca.
+- **De pie y recorriendo el salón.** Un mozo que el sistema no vio salir de la barra se reconoce
+  por llevar un rato de pie, desplazándose, con ropa del personal.
+- **Cambios de identidad.** Si el seguimiento pierde a un mozo y reaparece al lado, conserva la
+  marca; si el seguimiento le pasa la identidad de un cliente a otra persona, no se hereda nada.
+- **Visitas a la mesa más cercana.** Un mozo parado entre dos mesas visita solo la más cercana.
+
+Por eso conviene dibujar la **zona de personal** solo donde trabajan (detrás de la barra, la
+cafetera, el pase, la caja) y no sobre el pasillo por donde caminan los clientes.
+
 ## 5. Postura (sentado / parado)
 
 Sin modelo de keypoints, el sistema decide con la proporción alto/ancho de cada persona y su
@@ -55,10 +71,12 @@ movimiento. Depende del ángulo de la cámara. Para medirlo con video real:
 uv run python tools/replay.py VIDEO.dav --zones respaldo.yaml --camera ID --seconds 120 --annotate
 ```
 
-Abrir `data/replay/VIDEO/annotated.mp4`: cada persona tiene la etiqueta `cli`/`MOZO` y `parado`.
-Si clientes sentados aparecen "parado", subir **Proporción para 'parado'** (Configuración →
-Visión); si mozos parados aparecen sentados, bajarla. En cámaras en altura suele andar entre 2.4 y
-3.0 (en un video real de un café: sentados 1.3–2.8, parados 2.9–3.9).
+Abrir `data/replay/VIDEO/annotated.mp4`: cada mesa muestra su estado y cuántas personas cuenta, y
+el personal lleva la marca **MOZO**. Si una mesa con gente sentada cuenta de menos, revisar que el
+polígono de asientos cubra dónde apoyan los pies (el punto que se usa es el borde inferior de cada
+persona). Si mozos parados aparecen sentados, bajar **Proporción para 'parado'** (Configuración →
+Visión). En cámaras en altura suele andar entre 2.4 y 3.0. Alguien sentado que la cámara ve
+"parado" igual cuenta como sentado si está quieto en una silla.
 
 ## 6. Detección por mosaicos
 

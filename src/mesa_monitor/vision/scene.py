@@ -44,6 +44,13 @@ class CameraZonesRT:
         self._expanded = {
             v.table_id: expand(v.seats_polygon, self.seats_expand) for v in self.views
         }
+        self._centers = {
+            v.table_id: (
+                sum(p[0] for p in v.table_polygon) / len(v.table_polygon),
+                sum(p[1] for p in v.table_polygon) / len(v.table_polygon),
+            )
+            for v in self.views
+        }
         # Asientos más chicos primero: si dos áreas se pisan, gana la más específica.
         self._by_area = sorted(self.views, key=lambda v: area(v.seats_polygon))
 
@@ -76,6 +83,18 @@ class CameraZonesRT:
     def near_table(self, x: float, y: float) -> list[str]:
         """Mesas cuyo polígono de asientos *ampliado* contiene el punto."""
         return [tid for tid, poly in self._expanded.items() if contains(poly, x, y)]
+
+    def nearest_table(self, x: float, y: float) -> str | None:
+        """La mesa que está atendiendo alguien parado en (x, y): entre las que tienen el punto
+        en sus asientos ampliados, la de centro más cercano. Un mozo parado entre dos mesas
+        visita una sola, no las dos."""
+        best: tuple[float, str] | None = None
+        for tid in self.near_table(x, y):
+            cx, cy = self._centers[tid]
+            d = (cx - x) ** 2 + (cy - y) ** 2
+            if best is None or d < best[0]:
+                best = (d, tid)
+        return None if best is None else best[1]
 
     def in_staff_zone(self, x: float, y: float) -> bool:
         return any(contains(z, x, y) for z in self.staff_zones)
@@ -118,6 +137,8 @@ class PostureParams:
         0.02  # desplazamiento del punto de anclaje (fracción de imagen) por segundo
     )
     motion_window_s: float = 3.0
+    still_speed: float = 0.012  # por debajo de esto (y con ≥ `still_min_s` de historia): quieto
+    still_min_s: float = 2.0
     frame_aspect: float = 16 / 9  # ancho/alto del frame en píxeles reales (corrige substreams D1)
 
 
@@ -150,6 +171,10 @@ class MotionTracker:
         (t0, x0, y0), (t1, x1, y1) = h[0], h[-1]
         return float(((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5 / (t1 - t0))
 
+    def history_s(self, track_id: int) -> float:
+        h = self._hist.get(track_id)
+        return h[-1][0] - h[0][0] if h else 0.0
+
     def forget(self, active: set[int], now: datetime | None = None, after_s: float = 10.0) -> None:
         t = now.timestamp() if now else None
         for tid, h in list(self._hist.items()):
@@ -165,6 +190,13 @@ class PersonResult:
     standing: bool
     table_id: str | None
     is_staff: bool
+    still: bool = False  # sin moverse (con historia suficiente)
+
+    @property
+    def seated_like(self) -> bool:
+        """Sentado, o quieto en una silla: con cámaras altas alguien sentado de costado se ve
+        tan alargado como uno parado, pero no se desplaza."""
+        return not self.standing or (self.still and self.table_id is not None)
 
 
 @dataclass(frozen=True)
@@ -172,6 +204,7 @@ class TableCounts:
     seated_customers: int
     staff_present: bool
     object_count: int | None
+    present_customers: int | None = None  # clientes en los asientos en cualquier postura
 
 
 @dataclass
@@ -192,7 +225,9 @@ def analyze_frame(
     motion: MotionTracker | None = None,
 ) -> SceneResult:
     people: list[PersonResult] = []
-    active: set[int] = set()
+    persons = list(persons)
+    active: set[int] = {b.track_id for b in persons if b.track_id is not None}
+    classifier.begin_frame(active, ts)
     for b in persons:
         ax, ay = b.anchor
         if zones.masked(ax, ay):
@@ -203,10 +238,16 @@ def analyze_frame(
             else None
         )
         standing = is_standing(b, posture, speed)
+        still = (
+            motion is not None
+            and b.track_id is not None
+            and speed is not None
+            and speed < posture.still_speed
+            and motion.history_s(b.track_id) >= posture.still_min_s
+        )
         table = zones.table_at(ax, ay)
         staff = False
         if b.track_id is not None:
-            active.add(b.track_id)
             staff = classifier.classify(
                 PersonFeatures(
                     track_id=b.track_id,
@@ -215,9 +256,13 @@ def analyze_frame(
                     table_id=table,
                     in_staff_zone=zones.in_staff_zone(ax, ay),
                     color_similarity=(color_similarity or {}).get(b.track_id),
+                    x=ax,
+                    y=ay,
+                    still=still,
+                    top=b.y1,
                 )
             )
-        people.append(PersonResult(b, standing, table, staff))
+        people.append(PersonResult(b, standing, table, staff, still))
     classifier.forget(active, ts)
     if motion is not None:
         motion.forget(active, ts)
@@ -226,16 +271,17 @@ def analyze_frame(
     obj_list = [o for o in objects if not zones.masked(*o.center)]
     for v in zones.views:
         seated = sum(
-            1 for p in people if p.table_id == v.table_id and not p.standing and not p.is_staff
+            1 for p in people if p.table_id == v.table_id and p.seated_like and not p.is_staff
         )
+        present = sum(1 for p in people if p.table_id == v.table_id and not p.is_staff)
         staff_here = any(
-            p.is_staff and p.standing and v.table_id in zones.near_table(*p.box.anchor)
+            p.is_staff and p.standing and zones.nearest_table(*p.box.anchor) == v.table_id
             for p in people
         )
         n_obj: int | None = None
         if objects_enabled and v.clean_mode is not CleanMode.STAFF_VISIT_ONLY:
             n_obj = sum(1 for o in obj_list if contains(v.table_polygon, *o.center))
-        tables[v.table_id] = TableCounts(seated, staff_here, n_obj)
+        tables[v.table_id] = TableCounts(seated, staff_here, n_obj, present)
     return SceneResult(people, tables)
 
 
@@ -261,4 +307,5 @@ def fuse(table_id: str, ts: datetime, candidates: Sequence[CameraTableObs]) -> O
         best.counts.staff_present,
         best.counts.object_count,
         view_healthy=True,
+        present=best.counts.present_customers,
     )

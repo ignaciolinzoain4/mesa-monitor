@@ -25,8 +25,27 @@ _MODEL_CLASSES = {
     "medium": "RFDETRMedium",
     "large": "RFDETRLarge",
 }
-# Objetos de mesa para el estado "sucia" (SPEC §6). Configurable.
-DEFAULT_OBJECT_CLASSES = ("cup", "bowl", "wine glass", "bottle", "fork", "knife", "spoon")
+# Objetos de mesa (SPEC §6): vajilla y comida de COCO. Indican "consumiendo" con clientes y
+# "sucia" cuando se fueron. Configurable.
+DEFAULT_OBJECT_CLASSES = (
+    "cup",
+    "bowl",
+    "wine glass",
+    "bottle",
+    "fork",
+    "knife",
+    "spoon",
+    "sandwich",
+    "pizza",
+    "donut",
+    "cake",
+    "hot dog",
+    "banana",
+    "apple",
+    "orange",
+    "broccoli",
+    "carrot",
+)
 
 
 @dataclass(frozen=True)
@@ -34,7 +53,11 @@ class TilingParams:
     enabled: bool = True
     tile_w: int = 560
     tile_h: int = 600
-    overlap: int = 96
+    overlap: int = 128  # horizontal
+    # Vertical: más que el alto de una persona del fondo. Las personas de adelante (más altas que
+    # el solapamiento) quedan cortadas en dos mosaicos: las completa `full_pass`.
+    overlap_h: int = 200
+    full_pass: bool = True  # además de los mosaicos, una pasada sobre la región entera
     batch_size: int = 4
     iou_threshold: float = 0.5
 
@@ -113,12 +136,20 @@ class Detector:
             slicer = sv.InferenceSlicer(
                 callback=self._predict_batch if t.batch_size > 1 else self._predict,
                 slice_wh=(t.tile_w, t.tile_h),
-                overlap_wh=(t.overlap, t.overlap),
+                overlap_wh=(t.overlap, t.overlap_h),
                 iou_threshold=t.iou_threshold,
                 thread_workers=1,
                 batch_size=t.batch_size,
             )
             det = slicer(crop)
+            if t.full_pass:
+                # Pasada sobre la región entera: las personas grandes (cerca de la cámara) salen
+                # completas; las "medias personas" que dejan los bordes de los mosaicos quedan
+                # dentro de esas cajas y `suppress_contained` las saca.
+                full = self._predict(np.ascontiguousarray(crop))
+                det = sv.Detections.merge([full, det]).with_nms(
+                    threshold=t.iou_threshold, class_agnostic=False
+                )
         else:
             det = self._predict(np.ascontiguousarray(crop))
 
@@ -129,8 +160,11 @@ class Detector:
             return FrameDetections(_empty(), _empty(), [])
         cls = det.class_id if det.class_id is not None else np.full(len(det), -1)
         conf = det.confidence if det.confidence is not None else np.ones(len(det))
-        persons = cast(
-            sv.Detections, det[(cls == self._person_id) & (conf >= self.params.person_confidence)]
+        persons = suppress_contained(
+            cast(
+                sv.Detections,
+                det[(cls == self._person_id) & (conf >= self.params.person_confidence)],
+            )
         )
         obj_mask = np.array(
             [
@@ -150,12 +184,42 @@ class Detector:
         return FrameDetections(persons, objects, names)
 
 
+def suppress_contained(det: sv.Detections, max_inside: float = 0.85) -> sv.Detections:
+    """Saca las cajas que están casi enteras dentro de otra más grande.
+
+    Con mosaicos solapados el detector a veces devuelve a la misma persona dos veces (el cuerpo
+    entero y solo el torso): eso duplicaba "mozos" y sumaba un cliente fantasma a la mesa.
+    """
+    if len(det) < 2:
+        return det
+    xyxy = det.xyxy.astype(float)
+    areas = (xyxy[:, 2] - xyxy[:, 0]).clip(0) * (xyxy[:, 3] - xyxy[:, 1]).clip(0)
+    order = np.argsort(-areas)
+    keep = np.ones(len(det), dtype=bool)
+    for rank, i in enumerate(order):
+        if areas[i] <= 0:
+            keep[i] = False
+            continue
+        for j in order[:rank]:
+            if not keep[j]:
+                continue
+            ix = min(xyxy[i, 2], xyxy[j, 2]) - max(xyxy[i, 0], xyxy[j, 0])
+            iy = min(xyxy[i, 3], xyxy[j, 3]) - max(xyxy[i, 1], xyxy[j, 1])
+            if ix > 0 and iy > 0 and ix * iy / areas[i] >= max_inside:
+                keep[i] = False
+                break
+    return det if keep.all() else cast(sv.Detections, det[keep])
+
+
 @dataclass(frozen=True)
 class TrackerParams:
     algorithm: str = "ocsort"  # "ocsort" (default) | "bytetrack" | "sort"
     lost_track_s: float = 3.0
     min_consecutive_frames: int = 2
     min_iou: float = 0.15  # a 2–3 fps la gente se mueve bastante entre frames
+    # Confianza mínima para crear un track. El default de la librería (0.6) dejaba sin trackear a
+    # la gente chica del fondo (el detector la ve con 0.4–0.6) y sus mesas figuraban libres.
+    high_conf: float = 0.4
 
 
 class Tracker:
@@ -173,10 +237,14 @@ class Tracker:
                 **common,
                 minimum_consecutive_frames=params.min_consecutive_frames,
                 minimum_iou_threshold=params.min_iou,
+                high_conf_det_threshold=params.high_conf,
             )
         elif params.algorithm == "bytetrack":
             self._t = trackers.ByteTrackTracker(
-                **common, minimum_consecutive_frames=params.min_consecutive_frames
+                **common,
+                minimum_consecutive_frames=params.min_consecutive_frames,
+                track_activation_threshold=params.high_conf,
+                high_conf_det_threshold=params.high_conf,
             )
         elif params.algorithm == "sort":
             self._t = trackers.SORTTracker(

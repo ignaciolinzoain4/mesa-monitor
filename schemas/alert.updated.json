@@ -191,6 +191,7 @@
         "LIBRE",
         "OCUPADA_SIN_ATENDER",
         "ATENDIDA",
+        "CONSUMIENDO",
         "DESOCUPADA_SUCIA",
         "SIN_VISION",
         "DESHABILITADA"

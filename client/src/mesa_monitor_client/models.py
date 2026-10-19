@@ -21,6 +21,7 @@ class TableState(str, Enum):
     LIBRE = "LIBRE"
     OCUPADA_SIN_ATENDER = "OCUPADA_SIN_ATENDER"
     ATENDIDA = "ATENDIDA"
+    CONSUMIENDO = "CONSUMIENDO"
     DESOCUPADA_SUCIA = "DESOCUPADA_SUCIA"
     SIN_VISION = "SIN_VISION"
     DESHABILITADA = "DESHABILITADA"
@@ -69,8 +70,10 @@ class TableStateData(_M):
     seated_at: datetime | None = None
     first_attention_at: datetime | None = None
     last_visit_at: datetime | None = None
+    served_at: datetime | None = None
     vacated_at: datetime | None = None
     people: int = 0
+    partial: bool = False
 
 
 class StaffVisitData(_M):

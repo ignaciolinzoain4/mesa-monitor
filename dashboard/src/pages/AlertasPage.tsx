@@ -218,7 +218,7 @@ export function AlertasPage() {
             }}
           />
           <div className="mt-2 flex flex-wrap gap-4 text-base">
-            {(['LIBRE', 'OCUPADA_SIN_ATENDER', 'ATENDIDA', 'DESOCUPADA_SUCIA', 'SIN_VISION'] as const).map((s) => (
+            {(['LIBRE', 'OCUPADA_SIN_ATENDER', 'ATENDIDA', 'CONSUMIENDO', 'DESOCUPADA_SUCIA', 'SIN_VISION'] as const).map((s) => (
               <span key={s} className="flex items-center gap-2">
                 <span className="inline-block h-4 w-4 rounded" style={{ background: STATE_STYLE[s].fill }} />
                 {STATE_STYLE[s].label}

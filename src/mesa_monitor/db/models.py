@@ -162,6 +162,11 @@ class TableSession(Base):
     max_people: Mapped[int] = mapped_column(SmallInteger, server_default=text("0"))
     # Segundos acumulados en SIN_VISION durante la sesión (las alertas los descuentan).
     vision_lost_seconds: Mapped[float] = mapped_column(Float, server_default=text("0"))
+    # Comida/bebida en la mesa (paso a CONSUMIENDO).
+    served_at: Mapped[datetime | None] = mapped_column(utc_ts())
+    # Ya estaban sentados cuando el sistema empezó a mirar: `seated_at` es una cota y la sesión
+    # no entra en los tiempos de espera ni de estadía.
+    partial: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
 
 
 class StaffVisit(Base):

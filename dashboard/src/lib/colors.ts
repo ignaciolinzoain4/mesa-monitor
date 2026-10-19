@@ -7,12 +7,14 @@ export function sectorColor(sector: string, sectors: string[]): string {
   return SECTOR_COLORS[(i < 0 ? 0 : i) % SECTOR_COLORS.length]
 }
 
-/** Colores de estado de mesa: iguales en el dashboard y en /alertas. */
+/** Colores de estado de mesa: iguales en el dashboard, en /alertas y en el video del replay
+ * (`vision/pipeline.py` STATE_COLORS). Siempre van con su nombre: el color nunca es la única pista. */
 export const STATE_STYLE: Record<TableState, { fill: string; label: string }> = {
-  LIBRE: { fill: '#166534', label: 'Libre' },
-  OCUPADA_SIN_ATENDER: { fill: '#b45309', label: 'Sin atender' },
-  ATENDIDA: { fill: '#1d4ed8', label: 'Atendida' },
-  DESOCUPADA_SUCIA: { fill: '#7e22ce', label: 'Sucia' },
+  LIBRE: { fill: '#16a34a', label: 'Libre' },
+  OCUPADA_SIN_ATENDER: { fill: '#dc2626', label: 'Sin atender' },
+  ATENDIDA: { fill: '#1d4ed8', label: 'Atendidos' },
+  CONSUMIENDO: { fill: '#0891b2', label: 'Consumiendo' },
+  DESOCUPADA_SUCIA: { fill: '#a855f7', label: 'Sucia' },
   SIN_VISION: { fill: '#475569', label: 'Sin visión' },
   DESHABILITADA: { fill: '#1e293b', label: 'Deshabilitada' },
 }

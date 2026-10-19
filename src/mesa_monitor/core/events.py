@@ -35,8 +35,15 @@ class TableStateData(BaseModel):
     seated_at: datetime | None = None
     first_attention_at: datetime | None = None
     last_visit_at: datetime | None = None
+    served_at: datetime | None = Field(
+        default=None, description="Comida o bebida detectada en la mesa (paso a CONSUMIENDO)"
+    )
     vacated_at: datetime | None = None
     people: int = 0
+    partial: bool = Field(
+        default=False,
+        description="La sesión empezó antes de que el sistema mirara (sin tiempo de espera)",
+    )
 
 
 class StaffVisitData(BaseModel):

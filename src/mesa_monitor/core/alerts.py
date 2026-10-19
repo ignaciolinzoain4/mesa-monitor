@@ -60,7 +60,7 @@ def table_alerts(t: TableAlertInput, values: dict[str, Any], now: datetime) -> l
         elif elapsed >= warn:
             add(AlertType.SIN_ATENCION, Severity.WARNING, t.state_since, elapsed, warn)
 
-    elif t.state is TableState.ATENDIDA:
+    elif t.state in (TableState.ATENDIDA, TableState.CONSUMIENDO):
         ref = t.last_visit_at or t.first_attention_at or t.state_since
         span = _secs(now, ref)
         elapsed = span - min(t.paused_s, span)
@@ -76,7 +76,7 @@ def table_alerts(t: TableAlertInput, values: dict[str, Any], now: datetime) -> l
 
     if (
         values.get("alert_estadia_larga_enabled")
-        and t.state in (TableState.OCUPADA_SIN_ATENDER, TableState.ATENDIDA)
+        and t.state in (TableState.OCUPADA_SIN_ATENDER, TableState.ATENDIDA, TableState.CONSUMIENDO)
         and t.seated_at is not None
     ):
         stay = _secs(now, t.seated_at)

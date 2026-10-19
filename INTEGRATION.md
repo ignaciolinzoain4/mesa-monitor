@@ -18,7 +18,8 @@ sabe, para cada mesa, en qué estado está y hace cuánto:
 |---|---|
 | `LIBRE` | Mesa vacía y limpia |
 | `OCUPADA_SIN_ATENDER` | Hay clientes sentados y todavía no pasó un mozo |
-| `ATENDIDA` | Hay clientes y ya fueron atendidos |
+| `ATENDIDA` | Hay clientes y ya fueron atendidos (pasó un mozo) |
+| `CONSUMIENDO` | Ya tienen comida o bebida en la mesa |
 | `DESOCUPADA_SUCIA` | Los clientes se fueron y falta limpiar |
 | `SIN_VISION` | La cámara no ve la mesa en este momento |
 | `DESHABILITADA` | Mesa desactivada |
@@ -32,6 +33,10 @@ Además genera **alertas** cuando una mesa espera demasiado:
 | `MESA_SUCIA` | Mesa sin limpiar hace más de X minutos |
 | `ESTADIA_LARGA` | Clientes hace mucho tiempo (opcional) |
 | `CAMARA_CAIDA` | Una cámara no envía imagen |
+
+Cuando el sistema arranca con mesas ya ocupadas no sabe cuándo se sentaron: esas sesiones vienen
+con `partial: true`, arrancan en `CONSUMIENDO` si ya hay comida o bebida en la mesa y no cuentan
+para las métricas de espera. `served_at` indica cuándo apareció la comida o bebida en la mesa.
 
 Y **métricas**: espera promedio hasta la primera atención, porcentaje de mesas atendidas a tiempo,
 rotación, ocupación, etc. Las métricas son siempre por **mesa, sector, horario o día**, nunca por

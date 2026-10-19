@@ -57,8 +57,10 @@ async def table_states(db: AsyncSession, now: datetime | None = None) -> list[Ta
                 seated_at=ses.seated_at if ses else None,
                 first_attention_at=ses.first_attention_at if ses else None,
                 last_visit_at=last_visit.get(ses.id) if ses else None,
+                served_at=ses.served_at if ses else None,
                 vacated_at=ses.vacated_at if ses else None,
                 people=st.people_now if st else 0,
+                partial=ses.partial if ses else False,
             )
         )
     return out

@@ -116,6 +116,8 @@ export function LivePage() {
                 <dd>{formatTime(sel.seated_at)}</dd>
                 <dt className="text-slate-400">Primera atención</dt>
                 <dd>{formatTime(sel.first_attention_at)}</dd>
+                <dt className="text-slate-400">Comida en la mesa</dt>
+                <dd>{formatTime(sel.served_at ?? null)}</dd>
                 <dt className="text-slate-400">Última visita</dt>
                 <dd>{formatTime(sel.last_visit_at)}</dd>
                 <dt className="text-slate-400">Se fueron</dt>

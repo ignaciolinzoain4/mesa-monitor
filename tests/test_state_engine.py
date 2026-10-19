@@ -1,7 +1,7 @@
 """Tests del state engine con líneas de tiempo sintéticas (SPEC §8.4 + casos borde)."""
 
 from collections.abc import Iterator
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from itertools import count, pairwise
 
@@ -50,8 +50,14 @@ def ids() -> "callable[[str], str]":  # type: ignore[valid-type]
 
 class Sim:
     def __init__(
-        self, params: EngineParams | None = None, machine: TableMachine | None = None
+        self,
+        params: EngineParams | None = None,
+        machine: TableMachine | None = None,
+        *,
+        fresh: bool = False,
     ) -> None:
+        # Por defecto la mesa arranca vacía y vigilada (sin sesiones parciales de arranque).
+        params = replace(params or EngineParams(), startup_grace_s=-1) if not fresh else params
         self.m = machine or TableMachine("t1", params or EngineParams(), ids())
         self.t = 0.0
         self.events: list[Event] = []
@@ -363,3 +369,105 @@ def test_random_timelines_keep_invariants(seed: int) -> None:
     ended = [e.visit_id for e in sim.of(VisitEnded)]
     assert len(ended) == len(set(ended))
     assert set(ended) <= started
+
+
+# --------------------------------------------------------------------------- consumo y arranque
+
+C = TableState.CONSUMIENDO
+
+
+def test_food_on_table_moves_attended_table_to_consuming() -> None:
+    sim = Sim().run(
+        Seg(10),
+        Seg(30, seated=2),
+        Seg(6, seated=2, staff=True),  # toma el pedido
+        Seg(60, seated=2),
+        Seg(30, seated=2, objects=3),  # llega la comida
+    )
+    assert sim.transitions() == [(L, OC), (OC, A), (A, C)]
+    assert sim.m.session is not None
+    assert sim.m.session.served_at == at(106)
+    assert sim.m.session.first_attention_at == at(40)  # la visita, no la comida
+
+
+def test_food_without_detected_visit_counts_as_attention() -> None:
+    sim = Sim().run(Seg(10), Seg(60, seated=2), Seg(30, seated=2, objects=2))
+    assert sim.transitions() == [(L, OC), (OC, C)]
+    assert sim.m.session is not None
+    assert sim.m.session.first_attention_at == at(70)
+    reasons = [e.reason for e in sim.of(Transition)]
+    assert reasons[-1] == "food_served_without_visit"
+
+
+def test_flickering_object_does_not_mean_food() -> None:
+    sim = Sim().run(Seg(10), Seg(30, seated=2))
+    for _ in range(20):  # aparece 1 s cada 6 s
+        sim.run(Seg(1, seated=2, objects=1), Seg(5, seated=2))
+    assert sim.transitions() == [(L, OC)]
+
+
+def test_leftovers_from_previous_customers_are_not_consumption() -> None:
+    sim = Sim().run(
+        Seg(10),
+        Seg(30, seated=2),
+        Seg(130, seated=0, objects=3),  # se van y dejan la mesa sucia
+        Seg(60, seated=2, objects=3),  # se sientan otros con la mesa sin levantar
+    )
+    assert sim.transitions() == [(L, OC), (OC, S), (S, OC)]
+    sim.run(Seg(20, seated=2, objects=5))  # les traen lo suyo
+    assert sim.m.state is C
+
+
+def test_table_already_eating_at_startup_starts_consuming() -> None:
+    sim = Sim(fresh=True).run(Seg(30, seated=3, objects=4))
+    assert sim.transitions() == [(L, C)]
+    (opened,) = sim.of(SessionOpened)
+    assert opened.partial
+    assert sim.m.session is not None
+    assert sim.m.session.first_attention_at is None  # no se sabe: no entra en las métricas
+    assert [e.reason for e in sim.of(Transition)] == ["initial_state"]
+
+
+def test_table_occupied_at_startup_without_food_is_partial_unattended() -> None:
+    sim = Sim(fresh=True).run(Seg(30, seated=2))
+    assert sim.transitions() == [(L, OC)]
+    assert sim.m.session is not None
+    assert sim.m.session.partial
+    # La comida que llega después no inventa un tiempo de espera para una sesión parcial.
+    sim.run(Seg(20, seated=2, objects=2))
+    assert sim.m.state is C
+    assert sim.m.session.first_attention_at is None
+
+
+def test_customers_arriving_after_startup_are_a_normal_session() -> None:
+    sim = Sim(fresh=True).run(Seg(30), Seg(30, seated=2))
+    (opened,) = sim.of(SessionOpened)
+    assert not opened.partial
+
+
+def test_customers_seen_standing_keep_the_table_occupied() -> None:
+    sim = Sim().run(Seg(10), Seg(30, seated=2))
+    for _ in range(round(300 * FPS)):  # la cámara los ve "parados" (postura dudosa)
+        obs = Observation("t1", sim.ts(), 0, False, 0, present=2)
+        sim.events.extend(sim.m.observe(obs))
+        sim.t += 1 / FPS
+    assert sim.transitions() == [(L, OC)]
+
+
+def test_group_size_ignores_one_frame_duplicates() -> None:
+    sim = Sim().run(Seg(10), Seg(30, seated=2))
+    for i in range(round(60 * FPS)):
+        n = 3 if i % 5 == 0 else 2  # una caja duplicada cada tanto
+        obs = Observation("t1", sim.ts(), n, False, 0)
+        sim.events.extend(sim.m.observe(obs))
+        sim.t += 1 / FPS
+    assert sim.m.session is not None
+    assert sim.m.session.max_people == 2
+    assert sim.m.snapshot().people_now == 2
+
+
+def test_flickering_food_at_startup_still_means_consuming() -> None:
+    sim = Sim(fresh=True)
+    for _ in range(10):  # los platos se detectan 1 de cada 2 segundos
+        sim.run(Seg(1, seated=3, objects=2), Seg(2, seated=3, objects=0))
+    assert sim.transitions() == [(L, C)]

@@ -75,8 +75,10 @@ def state_data(
         seated_at=snap.seated_at,
         first_attention_at=snap.first_attention_at,
         last_visit_at=snap.last_visit_at,
+        served_at=snap.served_at,
         vacated_at=snap.vacated_at,
         people=snap.people_now,
+        partial=snap.partial,
     )
 
 
@@ -120,6 +122,7 @@ class Persistence:
                     table_id=e.table_id,
                     business_date=business_date(e.seated_at, self.tz, self.cutoff),
                     seated_at=e.seated_at,
+                    partial=e.partial,
                 )
             )
             await db.flush()
@@ -129,6 +132,7 @@ class Persistence:
                 .where(TableSession.id == e.session_id)
                 .values(
                     first_attention_at=e.first_attention_at,
+                    served_at=e.served_at,
                     vacated_at=e.vacated_at,
                     max_people=e.max_people,
                     vision_lost_seconds=e.vision_lost_seconds,
@@ -265,11 +269,12 @@ class Persistence:
             # Sesión abierta pero estado inconsistente (ej. corte a mitad de una escritura):
             # se reconstruye desde la sesión.
             if ses is not None and state in (TableState.LIBRE, TableState.DESHABILITADA):
-                state = (
-                    TableState.ATENDIDA
-                    if ses.first_attention_at
-                    else TableState.OCUPADA_SIN_ATENDER
-                )
+                if ses.served_at:
+                    state = TableState.CONSUMIENDO
+                elif ses.first_attention_at:
+                    state = TableState.ATENDIDA
+                else:
+                    state = TableState.OCUPADA_SIN_ATENDER
             if ses is None and state not in (
                 TableState.LIBRE,
                 TableState.DESHABILITADA,
@@ -294,6 +299,8 @@ class Persistence:
                     people_now=0,
                     staff_present=False,
                     updated_at=st.updated_at if st else None,
+                    served_at=ses.served_at if ses else None,
+                    partial=ses.partial if ses else False,
                 )
             )
         return out

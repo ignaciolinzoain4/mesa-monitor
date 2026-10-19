@@ -23,6 +23,11 @@ DEFINITIONS: dict[str, tuple[Any, str, str]] = {
     ),
     "visit_min_s": (4, "Duración mínima de una visita del personal", "s"),
     "visit_max_s": (600, "Duración máxima de una visita", "s"),
+    "consume_confirm_s": (
+        10,
+        "Tiempo con comida o bebida en la mesa para pasar a Consumiendo",
+        "s",
+    ),
     "clean_confirm_s": (15, "Tiempo sin objetos para considerar la mesa limpia", "s"),
     "clean_objects_max": (0, "Objetos tolerados en una mesa limpia", "objetos"),
     "vision_loss_close_s": (900, "Tiempo sin visión que cierra la sesión", "s"),

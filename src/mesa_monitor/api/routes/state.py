@@ -33,7 +33,9 @@ class SessionOut(BaseModel):
     table: TableRef
     business_date: str
     seated_at: datetime
+    partial: bool
     first_attention_at: datetime | None
+    served_at: datetime | None
     vacated_at: datetime | None
     cleaned_at: datetime | None
     closed_at: datetime | None
@@ -41,6 +43,7 @@ class SessionOut(BaseModel):
     max_people: int
     visits: int
     wait_seconds: float | None
+    serve_seconds: float | None
     stay_seconds: float | None
     dirty_seconds: float | None
     vision_lost_seconds: float
@@ -68,15 +71,19 @@ def _out(s: TableSession, t: Table, visits: int) -> SessionOut:
         table=TableRef(id=t.id, label=t.label, sector=t.sector),
         business_date=s.business_date.isoformat(),
         seated_at=s.seated_at,
+        partial=s.partial,
         first_attention_at=s.first_attention_at,
+        served_at=s.served_at,
         vacated_at=s.vacated_at,
         cleaned_at=s.cleaned_at,
         closed_at=s.closed_at,
         close_reason=s.close_reason,
         max_people=s.max_people,
         visits=visits,
-        wait_seconds=_secs(s.seated_at, s.first_attention_at),
-        stay_seconds=_secs(s.seated_at, s.vacated_at),
+        # Sesiones parciales: no se sabe cuándo se sentaron (sin espera ni estadía).
+        wait_seconds=None if s.partial else _secs(s.seated_at, s.first_attention_at),
+        serve_seconds=None if s.partial else _secs(s.seated_at, s.served_at),
+        stay_seconds=None if s.partial else _secs(s.seated_at, s.vacated_at),
         dirty_seconds=_secs(s.vacated_at, s.cleaned_at),
         vision_lost_seconds=s.vision_lost_seconds,
     )

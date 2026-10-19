@@ -82,7 +82,9 @@ def _detector_from(settings: dict[str, Any], recommended: dict[str, Any] | None)
             enabled=bool(tiling.get("enabled", True)),
             tile_w=int(tiling.get("tile_w", 560)),
             tile_h=int(tiling.get("tile_h", 600)),
-            overlap=int(tiling.get("overlap", 96)),
+            overlap=int(tiling.get("overlap", 128)),
+            overlap_h=int(tiling.get("overlap_h", 200)),
+            full_pass=bool(tiling.get("full_pass", True)),
             batch_size=int(tiling.get("batch_size", 4)),
         ),
     )

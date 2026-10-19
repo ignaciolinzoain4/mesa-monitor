@@ -549,6 +549,7 @@
         "LIBRE",
         "OCUPADA_SIN_ATENDER",
         "ATENDIDA",
+        "CONSUMIENDO",
         "DESOCUPADA_SUCIA",
         "SIN_VISION",
         "DESHABILITADA"
@@ -634,6 +635,12 @@
           "default": null,
           "title": "Last Visit At"
         },
+        "partial": {
+          "default": false,
+          "description": "La sesión empezó antes de que el sistema mirara (sin tiempo de espera)",
+          "title": "Partial",
+          "type": "boolean"
+        },
         "people": {
           "default": 0,
           "title": "People",
@@ -674,6 +681,20 @@
           ],
           "default": null,
           "title": "Seated At"
+        },
+        "served_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Comida o bebida detectada en la mesa (paso a CONSUMIENDO)",
+          "title": "Served At"
         },
         "session_id": {
           "anyOf": [

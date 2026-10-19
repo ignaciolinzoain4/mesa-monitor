@@ -1,7 +1,8 @@
 # Mesa Monitor
 
-Sistema que mira las cámaras del local y registra **el estado de cada mesa** (libre, ocupada,
-atendida, sucia), cuánto tiempo pasa en cada estado y **avisa** cuando una mesa espera demasiado.
+Sistema que mira las cámaras del local y registra **el estado de cada mesa** (libre, sin atender,
+atendidos, consumiendo, sucia), cuánto tiempo pasa en cada estado y **avisa** cuando una mesa
+espera demasiado.
 Incluye una pantalla de alertas para las PCs del local, un panel de análisis y una API para
 conectarlo con el sistema de gestión.
 

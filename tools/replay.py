@@ -29,7 +29,8 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
-from mesa_monitor.core.enums import CleanMode, SessionCloseReason
+from mesa_monitor.core.alerts import TableAlertInput, table_alerts
+from mesa_monitor.core.enums import CleanMode, SessionCloseReason, Severity
 from mesa_monitor.core.state_engine import (
     EngineParams,
     Event,
@@ -40,8 +41,15 @@ from mesa_monitor.core.state_engine import (
     Transition,
     VisitStarted,
 )
+from mesa_monitor.core.thresholds import DEFAULTS
 from mesa_monitor.vision.detector import Detector, DetectorParams, TilingParams, TrackerParams
-from mesa_monitor.vision.pipeline import CameraPipeline, TableOverlay, annotate
+from mesa_monitor.vision.pipeline import (
+    STATE_NAMES,
+    CameraPipeline,
+    OverlayAlert,
+    TableOverlay,
+    annotate,
+)
 from mesa_monitor.vision.scene import CameraTableObs, CameraZonesRT, ViewZone, fuse
 from mesa_monitor.vision.sources import file_frames
 from mesa_monitor.vision.staff import StaffWeights
@@ -71,6 +79,47 @@ def load_zones(path: Path, camera_id: str) -> CameraZonesRT:
         staff_zones=[z["polygon"] for z in cam.get("staff_zones") or []],
         ignore_masks=[m["polygon"] for m in cam.get("ignore_masks") or []],
     )
+
+
+def overlay_state(
+    engine: StateEngine, now: datetime
+) -> tuple[dict[str, TableOverlay], list[OverlayAlert]]:
+    """Estado de cada mesa para dibujar y los avisos que estarían activos (reglas reales)."""
+    overlay: dict[str, TableOverlay] = {}
+    alerts: list[tuple[float, OverlayAlert]] = []
+    for tid, m in engine.machines.items():
+        snap = m.snapshot()
+        elapsed = None
+        if snap.state_since is not None:
+            elapsed = (now - snap.state_since).total_seconds() - snap.paused_s
+        overlay[tid] = TableOverlay(snap.state.value, elapsed, snap.people_now, tid)
+        inp = TableAlertInput(
+            tid,
+            snap.state,
+            snap.state_since,
+            snap.paused_s,
+            snap.seated_at,
+            snap.first_attention_at,
+            snap.last_visit_at,
+        )
+        for a in table_alerts(inp, DEFAULTS, now):
+            mins = int(a.elapsed_s // 60)
+            what = {
+                "SIN_ATENCION": "sin atender",
+                "SIN_VISITA": "sin visita del mozo",
+                "MESA_SUCIA": "sucia",
+            }.get(a.alert_type.value, STATE_NAMES.get(snap.state.value, ""))
+            alerts.append(
+                (
+                    -a.elapsed_s,
+                    OverlayAlert(
+                        f"Mesa {tid} · {what}",
+                        f"hace {mins} min",
+                        critical=a.severity is Severity.CRITICAL,
+                    ),
+                )
+            )
+    return overlay, [a for _, a in sorted(alerts, key=lambda x: x[0])]
 
 
 def _jsonable(obj: Any) -> Any:
@@ -160,12 +209,13 @@ def main(argv: list[str] | None = None) -> int:
         next_detect: datetime | None = None
         result = None
         overlay: dict[str, TableOverlay] = {}
+        alerts: list[OverlayAlert] = []
         clock = ""
         for frame in frames:
             if next_detect is not None and frame.ts < next_detect:
                 # Frame intermedio: se dibuja con el último análisis (video fluido).
                 if writer is not None and result is not None:
-                    writer.write(annotate(frame.image, zones, result, None, overlay, clock))
+                    writer.write(annotate(frame.image, zones, result, None, overlay, clock, alerts))
                 continue
             next_detect = frame.ts + timedelta(seconds=1 / args.fps)
             result = pipe.process(frame.image, frame.ts)
@@ -181,24 +231,16 @@ def main(argv: list[str] | None = None) -> int:
                     ev_f.write(json.dumps(_jsonable(e)) + "\n")
                     if isinstance(e, Transition):
                         hhmm = e.ts.astimezone(tz)
-                        change = f"{e.from_state} → {e.to_state}"
+                        prev = STATE_NAMES.get(str(e.from_state), "—")
+                        change = f"{prev} → {STATE_NAMES.get(e.to_state.value)}"
                         print(f"  {hhmm:%H:%M:%S}  mesa {e.table_id}: {change} ({e.reason})")
             if args.annotate:
                 writer = writer or _VideoWriter(
                     out / "annotated.mp4", render_fps, frame.image.shape
                 )
-                overlay = {}
-                for tid, m in engine.machines.items():
-                    snap = m.snapshot()
-                    elapsed = None
-                    if snap.state_since is not None:
-                        elapsed = (frame.ts - snap.state_since).total_seconds() - snap.paused_s
-                    # En mesas ocupadas se muestra el tamaño del grupo (más estable que el conteo
-                    # de un frame, que parpadea cuando el detector pierde a alguien).
-                    people = snap.max_people if snap.session_id else snap.people_now
-                    overlay[tid] = TableOverlay(snap.state.value, elapsed, people)
+                overlay, alerts = overlay_state(engine, frame.ts)
                 clock = frame.ts.astimezone(tz).strftime("%H:%M:%S")
-                writer.write(annotate(frame.image, zones, result, None, overlay, clock))
+                writer.write(annotate(frame.image, zones, result, None, overlay, clock, alerts))
             n += 1
             last_ts = frame.ts
             if n % 50 == 0:
@@ -230,10 +272,12 @@ def _write_sessions(path: Path, events: list[Event]) -> None:
                 "table": e.table_id,
                 "session_id": e.session_id,
                 "seated_at": e.seated_at,
+                "partial": e.partial,
             }
         elif isinstance(e, SessionUpdated) and e.session_id in rows:
             rows[e.session_id].update(
                 first_attention_at=e.first_attention_at,
+                served_at=e.served_at,
                 vacated_at=e.vacated_at,
                 max_people=e.max_people,
             )
@@ -245,7 +289,9 @@ def _write_sessions(path: Path, events: list[Event]) -> None:
         "table",
         "session_id",
         "seated_at",
+        "partial",
         "first_attention_at",
+        "served_at",
         "vacated_at",
         "cleaned_at",
         "max_people",
@@ -258,7 +304,7 @@ def _write_sessions(path: Path, events: list[Event]) -> None:
         w.writeheader()
         for sid, r in rows.items():
             r["visits"] = visits.get(sid, 0)
-            if r.get("first_attention_at"):
+            if r.get("first_attention_at") and not r.get("partial"):
                 r["wait_min"] = round(
                     (r["first_attention_at"] - r["seated_at"]).total_seconds() / 60, 2
                 )
@@ -272,10 +318,15 @@ class _VideoWriter:
         import av
 
         self._c = av.open(str(path), "w")
-        self._s = self._c.add_stream("mpeg4", rate=Fraction(fps).limit_denominator(1000))
+        rate = Fraction(fps).limit_denominator(1000)
+        try:  # H.264: se reproduce en cualquier lado (WhatsApp, navegador, celular)
+            self._s = self._c.add_stream("libx264", rate=rate)
+            self._s.options = {"crf": "22", "preset": "medium"}
+        except (av.FFmpegError, ValueError):
+            self._s = self._c.add_stream("mpeg4", rate=rate)
+            self._s.bit_rate = 4_000_000
         self._s.height, self._s.width = shape[0] - shape[0] % 2, shape[1] - shape[1] % 2
         self._s.pix_fmt = "yuv420p"
-        self._s.bit_rate = 3_000_000
 
     def write(self, img: Any) -> None:
         import av

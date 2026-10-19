@@ -65,7 +65,7 @@ export type CameraZones = {
   ignore_masks: IgnoreMask[]
 }
 
-export type TableState = 'LIBRE' | 'OCUPADA_SIN_ATENDER' | 'ATENDIDA' | 'DESOCUPADA_SUCIA' | 'SIN_VISION' | 'DESHABILITADA'
+export type TableState = 'LIBRE' | 'OCUPADA_SIN_ATENDER' | 'ATENDIDA' | 'CONSUMIENDO' | 'DESOCUPADA_SUCIA' | 'SIN_VISION' | 'DESHABILITADA'
 
 export type Severity = 'info' | 'warning' | 'critical'
 export type AlertType = 'SIN_ATENCION' | 'SIN_VISITA' | 'MESA_SUCIA' | 'ESTADIA_LARGA' | 'CAMARA_CAIDA'
@@ -84,8 +84,10 @@ export type TableStateData = {
   seated_at: string | null
   first_attention_at: string | null
   last_visit_at: string | null
+  served_at?: string | null
   vacated_at: string | null
   people: number
+  partial?: boolean
 }
 
 export type AlertData = {
