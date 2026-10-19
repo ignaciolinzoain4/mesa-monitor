@@ -64,8 +64,8 @@ explicit = true
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-src = ["src", "tests", "tools"]
-extend-exclude = ["dashboard", "client"]
+src = ["src", "tests", "tools", "client/src"]
+extend-exclude = ["dashboard"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF", "ASYNC", "S", "N", "C4", "PT"]
@@ -80,12 +80,16 @@ ignore = [
 "tests/**" = ["S101", "S105", "S106", "E501", "SIM117"]
 "migrations/**" = ["N999", "E501"]
 "src/mesa_monitor/api/metrics_service.py" = ["E501"]  # SQL
+# Cliente: nombres de errores en español a propósito; compatible con Python 3.10 (sin StrEnum)
+"client/**" = ["N818", "UP042", "UP007"]
+"client/tests/**" = ["S101", "E501", "PT011", "S105"]
+"client/examples/**" = ["E501", "T201", "S104"]
 
 [tool.mypy]
 python_version = "3.12"
 strict = true
-packages = ["mesa_monitor"]
-mypy_path = "src"
+packages = ["mesa_monitor", "mesa_monitor_client"]
+mypy_path = "src:client/src"
 plugins = ["pydantic.mypy"]
 
 [[tool.mypy.overrides]]
@@ -93,8 +97,8 @@ module = ["asyncpg", "asyncpg.*", "rfdetr", "rfdetr.*", "trackers", "trackers.*"
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src", "."]
+testpaths = ["tests", "client/tests"]
+pythonpath = ["src", ".", "client/src"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"

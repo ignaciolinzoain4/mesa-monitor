@@ -1,0 +1,89 @@
+{
+  "$defs": {
+    "StaffVisitData": {
+      "properties": {
+        "session_id": {
+          "title": "Session Id",
+          "type": "string"
+        },
+        "started_at": {
+          "format": "date-time",
+          "title": "Started At",
+          "type": "string"
+        },
+        "table": {
+          "$ref": "#/$defs/TableRef"
+        },
+        "visit_id": {
+          "title": "Visit Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "table",
+        "session_id",
+        "visit_id",
+        "started_at"
+      ],
+      "title": "StaffVisitData",
+      "type": "object"
+    },
+    "TableRef": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "sector": {
+          "title": "Sector",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "sector"
+      ],
+      "title": "TableRef",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/StaffVisitData"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "ts": {
+      "format": "date-time",
+      "title": "Ts",
+      "type": "string"
+    },
+    "type": {
+      "const": "table.staff_visit",
+      "default": "table.staff_visit",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "ts",
+    "data"
+  ],
+  "title": "TableStaffVisitEvent",
+  "type": "object"
+}

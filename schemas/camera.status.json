@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "CameraStatus": {
+      "enum": [
+        "online",
+        "degraded",
+        "offline"
+      ],
+      "title": "CameraStatus",
+      "type": "string"
+    },
+    "CameraStatusData": {
+      "properties": {
+        "camera_id": {
+          "title": "Camera Id",
+          "type": "string"
+        },
+        "detail": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Detail"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/$defs/CameraStatus"
+        }
+      },
+      "required": [
+        "camera_id",
+        "name",
+        "status"
+      ],
+      "title": "CameraStatusData",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/CameraStatusData"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "ts": {
+      "format": "date-time",
+      "title": "Ts",
+      "type": "string"
+    },
+    "type": {
+      "const": "camera.status",
+      "default": "camera.status",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "ts",
+    "data"
+  ],
+  "title": "CameraStatusEvent",
+  "type": "object"
+}

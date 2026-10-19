@@ -22,7 +22,7 @@ Incluye un panel de análisis y una API para conectarlo con el sistema de gesti�
 | F5 | API completa, WebSocket, motor de alertas, webhooks, accesos | ✅ |
 | F6 | Pantalla /alertas para PCs de tiqueo (sonido, PIN, reconexión) | ✅ |
 | F7 | Métricas SQL, dashboard de análisis y export CSV | ✅ |
-| F8 | Cliente Python + guía de integración | Pendiente |
+| F8 | Cliente Python, INTEGRATION.md, ejemplos y JSON Schemas | ✅ |
 | F9 | Evaluación y ajuste | Pendiente |
 
 ## Instalación rápida (Docker)

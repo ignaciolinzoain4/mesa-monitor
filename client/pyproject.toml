@@ -1,0 +1,26 @@
+[project]
+name = "mesa-monitor-client"
+version = "0.1.0"
+description = "Cliente liviano para Mesa Monitor (estado de mesas, alertas y métricas). Sin dependencias de visión."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+# Rangos compatibles (no versiones exactas): este paquete se instala dentro de otro proyecto.
+dependencies = [
+    "httpx>=0.27,<1",
+    "websockets>=13,<18",
+    "pydantic>=2.5,<3",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10", "pytest-asyncio>=0.24,<2"]
+
+[build-system]
+requires = ["hatchling==1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mesa_monitor_client"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

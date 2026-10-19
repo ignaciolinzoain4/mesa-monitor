@@ -46,6 +46,8 @@ jobs:
         run: uv run pytest -q
       - name: Chequeo de licencias (falla con GPL/AGPL/LGPL/PML)
         run: uv run python tools/check_licenses.py
+      - name: JSON Schemas de eventos al día
+        run: PYTHONPATH=src uv run python tools/export_schemas.py --check
 
   dashboard:
     name: Dashboard (lint, tipos, build)

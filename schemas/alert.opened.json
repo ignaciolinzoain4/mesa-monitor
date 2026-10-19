@@ -1,0 +1,236 @@
+{
+  "$defs": {
+    "AlertData": {
+      "properties": {
+        "acknowledged_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Acknowledged At"
+        },
+        "alert_id": {
+          "title": "Alert Id",
+          "type": "string"
+        },
+        "alert_type": {
+          "$ref": "#/$defs/AlertType"
+        },
+        "camera_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Camera Id"
+        },
+        "elapsed_seconds": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Elapsed Seconds"
+        },
+        "opened_at": {
+          "format": "date-time",
+          "title": "Opened At",
+          "type": "string"
+        },
+        "resolved_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Resolved At"
+        },
+        "severity": {
+          "$ref": "#/$defs/Severity"
+        },
+        "snoozed_until": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Snoozed Until"
+        },
+        "state": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TableState"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "state_since": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "State Since"
+        },
+        "status": {
+          "$ref": "#/$defs/AlertStatus"
+        },
+        "table": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TableRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "threshold_seconds": {
+          "title": "Threshold Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "alert_id",
+        "alert_type",
+        "severity",
+        "status",
+        "threshold_seconds",
+        "opened_at"
+      ],
+      "title": "AlertData",
+      "type": "object"
+    },
+    "AlertStatus": {
+      "enum": [
+        "open",
+        "acknowledged",
+        "resolved"
+      ],
+      "title": "AlertStatus",
+      "type": "string"
+    },
+    "AlertType": {
+      "enum": [
+        "SIN_ATENCION",
+        "SIN_VISITA",
+        "MESA_SUCIA",
+        "ESTADIA_LARGA",
+        "CAMARA_CAIDA"
+      ],
+      "title": "AlertType",
+      "type": "string"
+    },
+    "Severity": {
+      "enum": [
+        "info",
+        "warning",
+        "critical"
+      ],
+      "title": "Severity",
+      "type": "string"
+    },
+    "TableRef": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        },
+        "sector": {
+          "title": "Sector",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "label",
+        "sector"
+      ],
+      "title": "TableRef",
+      "type": "object"
+    },
+    "TableState": {
+      "enum": [
+        "LIBRE",
+        "OCUPADA_SIN_ATENDER",
+        "ATENDIDA",
+        "DESOCUPADA_SUCIA",
+        "SIN_VISION",
+        "DESHABILITADA"
+      ],
+      "title": "TableState",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "data": {
+      "$ref": "#/$defs/AlertData"
+    },
+    "id": {
+      "title": "Id",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "ts": {
+      "format": "date-time",
+      "title": "Ts",
+      "type": "string"
+    },
+    "type": {
+      "const": "alert.opened",
+      "default": "alert.opened",
+      "title": "Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "ts",
+    "data"
+  ],
+  "title": "AlertOpenedEvent",
+  "type": "object"
+}

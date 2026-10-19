@@ -30,7 +30,12 @@ Las decisiones marcadas **[DECIDIDO]** no se discuten sin un impedimento técnic
 - `src/mesa_monitor/api/` — FastAPI. Todo bajo `/api/v1`. Sirve el dashboard compilado desde `dashboard/dist`.
 - `src/mesa_monitor/vision/` — worker (`python -m mesa_monitor.vision`). Dependencias pesadas en el extra `vision`.
 - `migrations/` — Alembic (async). `tools/` — scripts (licencias, benchmark, replay, evaluate).
-- `dashboard/` — React + Vite + TS + Tailwind. `client/` — paquete liviano `mesa_monitor_client` (F8).
+- `dashboard/` — React + Vite + TS + Tailwind (Recharts solo en Análisis, carga diferida).
+- `client/` — paquete liviano `mesa_monitor_client` (httpx, websockets, pydantic; rangos de versión
+  compatibles porque se instala en otro proyecto). Sus modelos deben coincidir con
+  `core/events.py`: `tests/test_schemas.py` lo verifica. Si cambia un evento: actualizar ambos y
+  correr `uv run python tools/export_schemas.py` (regenera `schemas/`).
+- `INTEGRATION.md` — guía para el asistente de IA del dueño (el sistema de gestión).
 
 ## Comandos
 ```sh
