@@ -21,7 +21,7 @@ Incluye un panel de análisis y una API para conectarlo con el sistema de gesti�
 | F4 | Máquina de estados + persistencia + clasificador y calibración de personal | ✅ |
 | F5 | API completa, WebSocket, motor de alertas, webhooks, accesos | ✅ |
 | F6 | Pantalla /alertas para PCs de tiqueo (sonido, PIN, reconexión) | ✅ |
-| F7 | Análisis y métricas | Pendiente |
+| F7 | Métricas SQL, dashboard de análisis y export CSV | ✅ |
 | F8 | Cliente Python + guía de integración | Pendiente |
 | F9 | Evaluación y ajuste | Pendiente |
 

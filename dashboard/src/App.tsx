@@ -1,5 +1,5 @@
 import { createBrowserRouter, Navigate, RouterProvider, useLocation } from 'react-router'
-import type { ReactNode } from 'react'
+import { lazy, Suspense, type ReactNode } from 'react'
 import { Layout } from './components/Layout'
 import { AuthProvider, useAuth } from './lib/auth'
 import { AlertasPage } from './pages/AlertasPage'
@@ -22,6 +22,9 @@ function RequireAuth({ children, admin = false }: { children: ReactNode; admin?:
   return children
 }
 
+// Análisis trae los gráficos (Recharts): se carga aparte para que /alertas siga liviana.
+const AnalysisPage = lazy(() => import('./pages/AnalysisPage').then((m) => ({ default: m.AnalysisPage })))
+
 const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
   { path: '/alertas', element: <AlertasPage /> },
@@ -34,6 +37,14 @@ const router = createBrowserRouter([
     children: [
       { path: '/', element: <Navigate to="/en-vivo" replace /> },
       { path: '/en-vivo', element: <LivePage /> },
+      {
+        path: '/analisis',
+        element: (
+          <Suspense fallback={<div className="p-6 text-slate-400">Cargando…</div>}>
+            <AnalysisPage />
+          </Suspense>
+        ),
+      },
       { path: '/sesiones', element: <SessionsPage /> },
       { path: '/salud', element: <HealthPage /> },
       { path: '/configuracion', element: <RequireAuth admin><SettingsPage /></RequireAuth> },

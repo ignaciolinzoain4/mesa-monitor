@@ -24,12 +24,12 @@ def go2rtc_ok(req: httpx.Request) -> httpx.Response:
 
 @asynccontextmanager
 async def api(
-    database_url: str, config_dir: Path, cameras_yaml: str = CAMERAS_YAML
+    database_url: str, config_dir: Path, cameras_yaml: str = CAMERAS_YAML, **settings: object
 ) -> AsyncIterator[httpx.AsyncClient]:
     """Cliente logueado como admin contra una app real (sin tareas de fondo)."""
     (config_dir / "cameras.yaml").write_text(cameras_yaml)
     app = create_app(
-        make_settings(database_url=database_url, config_dir=config_dir),
+        make_settings(database_url=database_url, config_dir=config_dir, **settings),
         go2rtc_transport=httpx.MockTransport(go2rtc_ok),
         start_background_tasks=False,
     )

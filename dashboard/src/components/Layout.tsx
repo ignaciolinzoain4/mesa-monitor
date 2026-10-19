@@ -3,6 +3,7 @@ import { useAuth } from '../lib/auth'
 
 const NAV: { to: string; label: string; adminOnly?: boolean }[] = [
   { to: '/en-vivo', label: 'En vivo' },
+  { to: '/analisis', label: 'Análisis' },
   { to: '/sesiones', label: 'Sesiones' },
   { to: '/salud', label: 'Salud del sistema' },
   { to: '/camaras', label: 'Cámaras', adminOnly: true },
