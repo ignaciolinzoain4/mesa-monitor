@@ -92,7 +92,8 @@ def overlay_state(
         elapsed = None
         if snap.state_since is not None:
             elapsed = (now - snap.state_since).total_seconds() - snap.paused_s
-        overlay[tid] = TableOverlay(snap.state.value, elapsed, snap.people_now, tid)
+        state = "VERIFICANDO" if m.verifying else snap.state.value
+        overlay[tid] = TableOverlay(state, elapsed, snap.people_now, tid)
         inp = TableAlertInput(
             tid,
             snap.state,

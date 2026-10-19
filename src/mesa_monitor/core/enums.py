@@ -19,6 +19,7 @@ class SessionCloseReason(StrEnum):
     VISION_LOST = "vision_lost"
     CLOSING_TIME = "closing_time"
     DISABLED = "disabled"
+    NO_SERVICE = "no_service"  # se fueron enseguida sin atención ni consumo (no ensucia métricas)
 
 
 class CleanMode(StrEnum):

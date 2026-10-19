@@ -67,10 +67,17 @@ class EngineParams:
     vision_recover_s: float = 3
     vision_loss_close_s: float = 15 * 60
     consume_objects_min: int = 1  # objetos nuevos en la mesa que indican comida/bebida servida
-    consume_confirm_s: float = 10
+    consume_confirm_s: float = 10  # la comida se ve desde hace al menos esto …
+    consume_window_s: float = 30  # … y en ≥ `consume_ratio` de los frames de esta ventana
+    consume_ratio: float = 0.4
     startup_grace_s: float = 10  # sentados desde el arranque (± esto) = sesión parcial
+    startup_verify_s: float = 45  # al arrancar, se mira esto antes de decidir el estado inicial
     startup_objects_ratio: float = 0.3  # al arrancar: comida vista en ≥ esta fracción de frames
     people_window_s: float = 20  # ventana para el tamaño "típico" del grupo (mediana)
+    resume_gap_s: float = 300  # sin observaciones más que esto (corte, reinicio): se revalida
+    clean_alone_s: float = 60  # sin objetos esto (en una mesa donde se ven): limpia sin ver al mozo
+    short_session_s: float = 180  # se van antes de esto sin atención ni consumo: no hubo servicio
+    pending_visit_after_seat_s: float = 10  # visita durante la confirmación: desde acá cuenta
 
 
 @dataclass(frozen=True)
@@ -224,7 +231,8 @@ class TableMachine:
         self.people_typical = 0
         self._seated = Sustain(params.seat_gap_s)
         self._present = Sustain(params.seat_gap_s)
-        self._served = Sustain(params.seat_gap_s)
+        self._served: deque[tuple[datetime, bool]] = deque()
+        self._clean_alone = Sustain(params.seat_gap_s)
         self._empty = Sustain(params.reseat_confirm_s)
         self._staff = Sustain(params.visit_gap_s)
         self._clean = Sustain(0)
@@ -237,6 +245,11 @@ class TableMachine:
         events: list[Event] = []
         if self.updated_at is None:
             self._fresh_since = obs.ts
+        elif (
+            self.state is not TableState.DESHABILITADA
+            and (obs.ts - self.updated_at).total_seconds() > self.params.resume_gap_s
+        ):
+            self._revalidate(self.updated_at, obs.ts, events)
         self.updated_at = obs.ts
         if self.state is TableState.DESHABILITADA:
             return events
@@ -249,6 +262,29 @@ class TableMachine:
         self._handle_staff(obs, events)
         self._handle_occupancy(obs, events)
         return events
+
+    def _revalidate(self, last_seen: datetime, now: datetime, events: list[Event]) -> None:
+        """Volvemos a mirar después de un corte largo (video cortado, worker reiniciado): lo que
+        pasó en el medio no se sabe. La sesión anterior se cierra cuando la vimos por última vez y
+        la mesa se evalúa de nuevo como al arrancar (sesión parcial si sigue ocupada)."""
+        self._end_visit(last_seen, events)
+        if self.session is not None:
+            self._close(last_seen, SessionCloseReason.VISION_LOST, None, events)
+        if self.state is not TableState.LIBRE:
+            self._transition(now, TableState.LIBRE, "revalidate_after_gap", events, since=now)
+        self._reset_detectors()
+        self._counts.clear()
+        self._obj_counts = []
+        self.resume_state = None
+        self.vision_lost_since = None
+        self._fresh_since = now
+
+    @property
+    def verifying(self) -> bool:
+        """Arranque: hay gente sentada pero todavía se está validando el estado inicial."""
+        return (
+            self.state is TableState.LIBRE and self._fresh_since is not None and self._seated.active
+        )
 
     def _track_people(self, obs: Observation) -> None:
         """Tamaño típico del grupo: mediana de la ventana (los duplicados y las pérdidas de un
@@ -292,7 +328,7 @@ class TableMachine:
         self.params = params
         self._seated.gap_s = params.seat_gap_s
         self._present.gap_s = params.seat_gap_s
-        self._served.gap_s = params.seat_gap_s
+        self._clean_alone.gap_s = params.seat_gap_s
         self._empty.gap_s = params.reseat_confirm_s
         self._staff.gap_s = params.visit_gap_s
 
@@ -511,18 +547,38 @@ class TableMachine:
         self._present.update(present or seated, obs.ts)
         objects = obs.object_count
         # Comida/bebida servida: objetos nuevos en la mesa con alguien sentado a ella.
-        self._served.update(
-            (present or seated)
-            and objects is not None
-            and objects >= self._obj_baseline + p.consume_objects_min,
-            obs.ts,
+        self._served.append(
+            (
+                obs.ts,
+                bool(present or seated)
+                and objects is not None
+                and objects >= self._obj_baseline + p.consume_objects_min,
+            )
         )
+        horizon = obs.ts - timedelta(seconds=p.consume_window_s)
+        while self._served and self._served[0][0] < horizon:
+            self._served.popleft()
 
         if self.state is TableState.LIBRE:
             self._empty.reset()
             if self._seated.active and objects is not None and len(self._obj_counts) < 2000:
                 self._obj_counts.append(objects)
-            if self._seated.held(p.occupy_confirm_s):
+            fresh = self._fresh_since
+            if (
+                fresh is not None
+                and not self._seated.active
+                and (obs.ts - fresh).total_seconds() > p.startup_grace_s
+            ):
+                self._fresh_since = None  # arrancó vacía: lo que venga es una sesión normal
+            # Al arrancar se mira un rato más antes de decidir el estado inicial (la comida de
+            # las mesas lejanas tarda en detectarse de forma estable).
+            verifying = (
+                fresh is not None
+                and self._seated.start is not None
+                and (self._seated.start - fresh).total_seconds() <= p.startup_grace_s
+                and (obs.ts - fresh).total_seconds() < p.startup_verify_s
+            )
+            if self._seated.held(p.occupy_confirm_s) and not verifying:
                 self._open_session(obs, events, reason="customers_seated")
             elif not self._seated.active:
                 self._unassigned_visit = None
@@ -546,6 +602,22 @@ class TableMachine:
             ):
                 vacated_at = self._empty.start or obs.ts
                 s.vacated_at = vacated_at
+                if (
+                    s.first_attention_at is None
+                    and s.served_at is None
+                    and s.visits == 0
+                    and (vacated_at - s.seated_at).total_seconds() < p.short_session_s
+                ):
+                    # Se sentaron un rato y se fueron (o se cambiaron de mesa) sin que nadie los
+                    # atendiera ni consumieran: la mesa no quedó sucia.
+                    self._end_visit(obs.ts, events)
+                    self._close(obs.ts, SessionCloseReason.NO_SERVICE, None, events)
+                    self._transition(
+                        obs.ts, TableState.LIBRE, "left_without_service", events, since=vacated_at
+                    )
+                    self._reset_detectors()
+                    self._obj_counts = []
+                    return
                 events.append(self._session_updated())
                 self._transition(
                     obs.ts,
@@ -581,6 +653,8 @@ class TableMachine:
                 return
             if not self._seated.active:
                 self._obj_counts = []
+            if self._cleaned_without_staff(obs, events):
+                return
             if self._cleaning_from is None or self._staff_only_cleaning(objects=obs.object_count):
                 return
             if obs.ts < self._cleaning_from:
@@ -592,15 +666,51 @@ class TableMachine:
             elif self._clean.held(p.clean_confirm_s):
                 self._finish_cleaning(obs.ts, events)
 
+    def _cleaned_without_staff(self, obs: Observation, events: list[Event]) -> bool:
+        """En una mesa donde la cámara sí ve la vajilla (se detectó consumo), que la mesa quede
+        sin objetos `clean_alone_s` alcanza para darla por limpia aunque no se haya visto al mozo
+        (lo pudo tapar alguien, o la limpiaron mientras la mesa todavía parecía ocupada)."""
+        s = self.session
+        p = self.params
+        if (
+            s is None
+            or s.served_at is None
+            or self._staff_only_cleaning(objects=obs.object_count)
+            or self._seated.active
+        ):
+            self._clean_alone.reset()
+            return False
+        ok = obs.object_count is not None and obs.object_count <= p.clean_objects_max
+        self._clean_alone.update(ok, obs.ts)
+        if not ok:
+            self._clean_alone.reset()
+            return False
+        if self._clean_alone.held(p.clean_alone_s):
+            self._finish_cleaning(obs.ts, events)
+            return True
+        return False
+
+    def _served_since(self, now: datetime) -> datetime | None:
+        """Desde cuándo hay comida/bebida en la mesa, o None si no alcanza la evidencia."""
+        p = self.params
+        if not self._served:
+            return None
+        hits = [ts for ts, ok in self._served if ok]
+        if not hits or len(hits) / len(self._served) < p.consume_ratio:
+            return None
+        if (now - hits[0]).total_seconds() < p.consume_confirm_s:
+            return None
+        return hits[0]
+
     def _check_served(self, obs: Observation, events: list[Event]) -> None:
-        """Comida o bebida sostenida en la mesa → CONSUMIENDO (ver docstring del módulo)."""
+        """Comida o bebida en la mesa → CONSUMIENDO (ver docstring del módulo)."""
         s = self.session
         assert s is not None
-        if self.state is TableState.CONSUMIENDO or not self._served.held(
-            self.params.consume_confirm_s
-        ):
+        if self.state is TableState.CONSUMIENDO:
             return
-        served_at = self._served.start or obs.ts
+        served_at = self._served_since(obs.ts)
+        if served_at is None:
+            return
         s.served_at = served_at
         reason = "food_served"
         if s.first_attention_at is None and not s.partial:
@@ -613,7 +723,6 @@ class TableMachine:
             reason,
             events,
             since=max(served_at, self.state_since or served_at),
-            confidence=self._served.ratio,
         )
 
     def _staff_only_cleaning(self, *, objects: int | None) -> bool:
@@ -626,6 +735,7 @@ class TableMachine:
         self._transition(ts, TableState.LIBRE, "cleaned", events, since=ts)
         self._cleaning_from = None
         self._clean.reset()
+        self._clean_alone.reset()
         self._seated.reset()
 
     def _open_session(self, obs: Observation, events: list[Event], reason: str) -> None:
@@ -651,7 +761,7 @@ class TableMachine:
         )
         events.append(SessionOpened(self.table_id, sid, seated_at, partial))
         self._empty.reset()
-        self._served.reset()
+        self._served.clear()
         if partial:
             # Ya estaban cuando empezamos a mirar: se valida el estado con lo que hay en la mesa.
             self._obj_baseline = 0
@@ -689,7 +799,10 @@ class TableMachine:
         pending = self._unassigned_visit
         self._unassigned_visit = None
         # El mozo llegó mientras se confirmaba la ocupación: la visita cuenta como atención.
-        if pending is not None and pending[0] >= seated_at:
+        # (desde un rato después de sentarse: el que llega parado con el grupo no es el mozo)
+        if pending is not None and pending[0] >= seated_at + timedelta(
+            seconds=p.pending_visit_after_seat_s
+        ):
             start, end = pending
             ongoing = self.visit if end is None else None
             self.visit = ongoing or VisitState(id=None, started_at=start)
@@ -757,8 +870,16 @@ class TableMachine:
         )
 
     def _reset_detectors(self) -> None:
-        for d in (self._seated, self._present, self._served, self._empty, self._staff, self._clean):
+        for d in (
+            self._seated,
+            self._present,
+            self._empty,
+            self._staff,
+            self._clean,
+            self._clean_alone,
+        ):
             d.reset()
+        self._served.clear()
         self.visit = None
         self._unassigned_visit = None
 

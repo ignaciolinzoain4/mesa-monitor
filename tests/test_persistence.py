@@ -33,7 +33,8 @@ async def test_events_are_persisted_and_state_restored(clean_db: str) -> None:
     persist = Persistence(sm, ZoneInfo("America/Argentina/Cordoba"))
     persist.tables = {"t1": TableMeta("t1", "1", "salon")}
 
-    state = StateEngine()
+    # Mesa vigilada desde antes (sin la validación de arranque de las sesiones parciales).
+    state = StateEngine(default_params=EngineParams(startup_grace_s=-1))
     for s in range(0, 40):  # se sientan
         ev = state.observe(Observation("t1", T0 + timedelta(seconds=s), 2, False, 0))
         await persist.apply(ev, [state.machines["t1"].snapshot()])

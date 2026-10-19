@@ -69,7 +69,8 @@ class DetectorParams:
     person_confidence: float = 0.4
     object_classes: tuple[str, ...] = DEFAULT_OBJECT_CLASSES
     object_confidence: dict[str, float] = field(default_factory=dict)
-    default_object_confidence: float = 0.35
+    # Mínimo global; cada mesa filtra según su tamaño (`scene.CameraZonesRT.object_min_conf`).
+    default_object_confidence: float = 0.25
     tiling: TilingParams = field(default_factory=TilingParams)
 
     def __post_init__(self) -> None:

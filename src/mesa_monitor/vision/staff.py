@@ -45,7 +45,7 @@ class StaffWeights:
     confirm_frames: int = 2
     memory_s: float = 300
     long_seated_s: float = 120
-    long_standing_s: float = 15
+    long_standing_s: float = 8
     long_standing_range: float = 0.06  # desplazamiento mínimo de pie (fracción de la imagen)
     table_dwell_s: float = 2.0  # permanencia mínima para contar que "visitó" una mesa
     multi_table_min: int = 3

@@ -248,7 +248,7 @@ def test_waiter_walking_the_floor_is_recognized_without_the_bar() -> None:
         for i in range(3 * 20)
     ]
     assert out[-1] is True
-    assert not any(out[: 3 * 10])  # no antes de llevar un rato de pie
+    assert not any(out[: 3 * 7])  # no antes de llevar un rato de pie
 
 
 def test_track_id_switch_does_not_carry_the_customer_lock() -> None:
@@ -261,3 +261,30 @@ def test_track_id_switch_does_not_carry_the_customer_lock() -> None:
         for i in range(3 * 20)
     ]
     assert out[-1] is True
+
+
+def test_waiter_with_hidden_legs_attends_the_table_beside_him() -> None:
+    """Caja cortada en las rodillas: el "pie" cae en la mesa de adelante, la cadera no."""
+    zones = CameraZonesRT(
+        camera_id="cam1",
+        views=[
+            ViewZone("atras", SQ(0.30, 0.30, 0.40, 0.36), SQ(0.25, 0.25, 0.45, 0.40)),
+            ViewZone("adelante", SQ(0.30, 0.48, 0.40, 0.54), SQ(0.25, 0.42, 0.45, 0.60)),
+        ],
+    )
+    cut = Box(0.41, 0.22, 0.45, 0.45)  # parado al lado de la mesa de atrás, piernas tapadas
+    assert zones.table_attended_by(cut) == "atras"
+
+
+def test_far_tables_accept_weaker_object_detections() -> None:
+    zones = CameraZonesRT(
+        camera_id="cam1",
+        views=[
+            ViewZone("chica", SQ(0.10, 0.10, 0.15, 0.15), SQ(0.05, 0.05, 0.20, 0.20)),
+            ViewZone("grande", SQ(0.50, 0.50, 0.70, 0.70), SQ(0.45, 0.45, 0.75, 0.75)),
+        ],
+    )
+    assert zones.object_min_conf("chica") < zones.object_min_conf("grande")
+    cup = Box(0.12, 0.12, 0.13, 0.13, confidence=0.27, label="cup")
+    res = analyze_frame(zones, [], [cup], T0, HeuristicStaffClassifier(), POSTURE)
+    assert res.tables["chica"].object_count == 1

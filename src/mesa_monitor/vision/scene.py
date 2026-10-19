@@ -30,6 +30,12 @@ class ViewZone:
     clean_mode: CleanMode = CleanMode.OBJECTS_AND_STAFF
 
 
+# Confianza mínima de objetos sobre la mesa según el tamaño de la mesa en la imagen.
+SMALL_TABLE_AREA = 0.0042  # fracción de la imagen
+OBJECT_CONF_FAR = 0.25
+OBJECT_CONF_NEAR = 0.32
+
+
 @dataclass
 class CameraZonesRT:
     """Zonas de una cámara preparadas para consultas rápidas."""
@@ -49,6 +55,12 @@ class CameraZonesRT:
                 sum(p[0] for p in v.table_polygon) / len(v.table_polygon),
                 sum(p[1] for p in v.table_polygon) / len(v.table_polygon),
             )
+            for v in self.views
+        }
+        self._object_conf = {
+            v.table_id: OBJECT_CONF_FAR
+            if area(v.table_polygon) < SMALL_TABLE_AREA
+            else OBJECT_CONF_NEAR
             for v in self.views
         }
         # Asientos más chicos primero: si dos áreas se pisan, gana la más específica.
@@ -95,6 +107,26 @@ class CameraZonesRT:
             if best is None or d < best[0]:
                 best = (d, tid)
         return None if best is None else best[1]
+
+    def table_attended_by(self, box: "Box") -> str | None:
+        """Mesa que atiende alguien parado. Con las piernas tapadas por sillas o mesas la caja
+        termina en las rodillas y el "pie" cae en la mesa de adelante: por eso la distancia se
+        mide desde la cadera (75 % del alto de la caja) y valen las mesas cercanas a cualquiera de
+        los dos puntos."""
+        ax, ay = box.anchor
+        hx, hy = ax, box.y1 + 0.75 * (box.y2 - box.y1)
+        best: tuple[float, str] | None = None
+        for tid in {*self.near_table(ax, ay), *self.near_table(hx, hy)}:
+            cx, cy = self._centers[tid]
+            d = (cx - hx) ** 2 + (cy - hy) ** 2
+            if best is None or d < best[0]:
+                best = (d, tid)
+        return None if best is None else best[1]
+
+    def object_min_conf(self, table_id: str) -> float:
+        """Confianza mínima de un objeto sobre la mesa: las mesas chicas en la imagen (lejanas)
+        aceptan detecciones más débiles; los platos del fondo salen con 0.25–0.30."""
+        return self._object_conf.get(table_id, OBJECT_CONF_NEAR)
 
     def in_staff_zone(self, x: float, y: float) -> bool:
         return any(contains(z, x, y) for z in self.staff_zones)
@@ -273,14 +305,21 @@ def analyze_frame(
         seated = sum(
             1 for p in people if p.table_id == v.table_id and p.seated_like and not p.is_staff
         )
-        present = sum(1 for p in people if p.table_id == v.table_id and not p.is_staff)
+        # Para el vaciado cuentan los sentados (o quietos en una silla); alguien parado en la
+        # zona de asientos (un vecino, alguien de paso) no mantiene ocupada la mesa.
+        present = seated
         staff_here = any(
-            p.is_staff and p.standing and zones.nearest_table(*p.box.anchor) == v.table_id
+            p.is_staff and p.standing and zones.table_attended_by(p.box) == v.table_id
             for p in people
         )
         n_obj: int | None = None
         if objects_enabled and v.clean_mode is not CleanMode.STAFF_VISIT_ONLY:
-            n_obj = sum(1 for o in obj_list if contains(v.table_polygon, *o.center))
+            min_conf = zones.object_min_conf(v.table_id)
+            n_obj = sum(
+                1
+                for o in obj_list
+                if o.confidence >= min_conf and contains(v.table_polygon, *o.center)
+            )
         tables[v.table_id] = TableCounts(seated, staff_here, n_obj, present)
     return SceneResult(people, tables)
 

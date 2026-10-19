@@ -32,6 +32,7 @@ const CLOSE_REASON: Record<string, string> = {
   reoccupied: 'Se ocupó antes de limpiar',
   vision_lost: 'Sin visión',
   closing_time: 'Cierre del local',
+  no_service: 'Se fueron sin ser atendidos (no cuenta)',
   disabled: 'Mesa deshabilitada',
 }
 

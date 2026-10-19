@@ -137,9 +137,16 @@ class CameraPipeline:
                 strict=False,
             )
         ]
+        obj_conf = (
+            det.objects.confidence
+            if det.objects.confidence is not None
+            else np.ones(len(det.objects))
+        )
         objects = [
-            Box(x1 / w, y1 / h, x2 / w, y2 / h, 1.0, None, name)
-            for (x1, y1, x2, y2), name in zip(det.objects.xyxy, det.object_names, strict=True)
+            Box(x1 / w, y1 / h, x2 / w, y2 / h, float(c), None, name)
+            for (x1, y1, x2, y2), name, c in zip(
+                det.objects.xyxy, det.object_names, obj_conf, strict=True
+            )
         ]
         result = analyze_frame(
             self.zones,
@@ -165,6 +172,7 @@ STATE_COLORS: dict[str, tuple[int, int, int]] = {
     "DESOCUPADA_SUCIA": (168, 85, 247),
     "SIN_VISION": (71, 85, 105),
     "DESHABILITADA": (30, 41, 59),
+    "VERIFICANDO": (100, 116, 139),  # solo overlay: arranque, validando el estado inicial
 }
 STATE_NAMES = {
     "LIBRE": "Libre",
@@ -174,6 +182,7 @@ STATE_NAMES = {
     "DESOCUPADA_SUCIA": "Sucia",
     "SIN_VISION": "Sin visión",
     "DESHABILITADA": "Deshabilitada",
+    "VERIFICANDO": "Verificando",
 }
 LEGEND = ("LIBRE", "OCUPADA_SIN_ATENDER", "ATENDIDA", "CONSUMIENDO", "DESOCUPADA_SUCIA")
 STAFF_COLOR = (250, 204, 21)
@@ -313,19 +322,22 @@ def annotate(
     # Lugar del panel y de los avisos: se reserva antes para que las etiquetas no queden debajo.
     f_clock, f_leg = _font(round(20 * k), "bold"), _font(round(11 * k), "regular")
     f_at, f_ad = _font(round(12 * k), "bold"), _font(round(11 * k), "regular")
-    legend_rows = [*LEGEND, "MOZO"]
+    verifying = any(st.state == "VERIFICANDO" for st in (states or {}).values())
+    legend_rows = [*LEGEND, *(["VERIFICANDO"] if verifying else []), "MOZO"]
     row_h = 17 * k
-    x0, y0 = 10 * k, 10 * k
     leg_w = max(d.textlength(STATE_NAMES.get(r, "Mozo"), font=f_leg) for r in legend_rows)
     pw = max(leg_w + 30 * k, d.textlength(clock or "", font=f_clock) + 24 * k)
     ph_panel = (34 * k if clock else 10 * k) + len(legend_rows) * row_h + 6 * k
+    # Hora y leyenda arriba a la derecha (debajo de la fecha que imprime el grabador); los avisos
+    # arriba a la izquierda.
+    x0, y0 = w - pw - 10 * k, 0.105 * h
     cards: list[tuple[OverlayAlert, tuple[float, float, float, float]]] = []
     if not calibrating:
         placed.append((x0, y0, x0 + pw, y0 + ph_panel))
-        ay = 0.115 * h
+        ay = 10 * k
         for a in (alerts or [])[:3]:
             cw = max(d.textlength(a.title, font=f_at), d.textlength(a.detail, font=f_ad)) + 30 * k
-            rect = (w - cw - 10 * k, ay, w - 10 * k, ay + 40 * k)
+            rect = (10 * k, ay, 10 * k + cw, ay + 40 * k)
             cards.append((a, rect))
             placed.append(rect)
             ay += 46 * k
@@ -374,19 +386,23 @@ def annotate(
             d.rounded_rectangle((x, y, x + tw + 2 * pad, y + ph), ph / 2, fill=(15, 23, 42, 210))
             d.text((x + pad, y + ph / 2), text, font=f_small, fill="white", anchor="lm")
             continue
+        # El estado lo dice el color (leyenda arriba a la derecha): la etiqueta lleva número,
+        # tiempo en el estado y personas.
         color = STATE_COLORS.get(st.state, (71, 85, 105))
-        state_txt = STATE_NAMES.get(st.state, st.state)
+        idle = st.state in ("LIBRE", "DESHABILITADA")
         timer = ""
-        if st.elapsed_s is not None and st.state not in ("LIBRE", "DESHABILITADA"):
+        if st.state == "VERIFICANDO":
+            timer = "…"
+        elif st.elapsed_s is not None and not idle:
             timer = _fmt_elapsed(st.elapsed_s)
-        people = st.people if st.state not in ("LIBRE", "DESHABILITADA") else 0
+        people = 0 if idle else st.people
         num_w = max(ph, d.textlength(name, font=f_num) + 10 * k)
-        parts_w = d.textlength(state_txt, font=f_state)
+        parts_w = 0.0
         if timer:
-            parts_w += 7 * k + d.textlength(timer, font=f_state)
+            parts_w += d.textlength(timer, font=f_state)
         if people:
-            parts_w += 8 * k + 9 * k + d.textlength(str(people), font=f_small)
-        bw = 3 * k + num_w + 7 * k + parts_w + pad
+            parts_w += (8 * k if timer else 0) + 9 * k + d.textlength(str(people), font=f_small)
+        bw = 3 * k + num_w + (4 * k + parts_w + pad if parts_w else 0)
         x, y = place(v.table_id, cx, top, bw, ph)
         d.rounded_rectangle((x, y, x + bw, y + ph), ph / 2, fill=(*color, 240))
         # número de mesa en un círculo/óvalo blanco
@@ -404,14 +420,10 @@ def annotate(
             anchor="mm",
         )
         tx = nx0 + num_w + 4 * k
-        d.text((tx, y + ph / 2), state_txt, font=f_state, fill="white", anchor="lm")
-        tx += d.textlength(state_txt, font=f_state)
         if timer:
-            tx += 7 * k
-            d.text((tx, y + ph / 2), timer, font=f_state, fill=(255, 255, 255, 215), anchor="lm")
-            tx += d.textlength(timer, font=f_state)
+            d.text((tx, y + ph / 2), timer, font=f_state, fill="white", anchor="lm")
+            tx += d.textlength(timer, font=f_state) + 8 * k
         if people:
-            tx += 8 * k
             # ícono de persona: cabeza + hombros
             hx, hy = tx + 4 * k, y + ph / 2
             d.ellipse(

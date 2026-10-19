@@ -57,7 +57,14 @@ class Sim:
         fresh: bool = False,
     ) -> None:
         # Por defecto la mesa arranca vacía y vigilada (sin sesiones parciales de arranque).
-        params = replace(params or EngineParams(), startup_grace_s=-1) if not fresh else params
+        # Las reglas de arranque, sesión corta sin servicio y visita temprana tienen sus tests.
+        if not fresh:
+            params = replace(
+                params or EngineParams(),
+                startup_grace_s=-1,
+                short_session_s=0,
+                pending_visit_after_seat_s=0,
+            )
         self.m = machine or TableMachine("t1", params or EngineParams(), ids())
         self.t = 0.0
         self.events: list[Event] = []
@@ -326,7 +333,7 @@ def test_disable_and_enable_table() -> None:
 
 def test_params_update_in_place() -> None:
     sim = Sim().run(Seg(10, seated=2))
-    sim.m.update_params(EngineParams(occupy_confirm_s=5))
+    sim.m.update_params(replace(sim.m.params, occupy_confirm_s=5))
     sim.run(Seg(1, seated=2))
     assert sim.transitions() == [(L, OC)]
 
@@ -419,7 +426,7 @@ def test_leftovers_from_previous_customers_are_not_consumption() -> None:
 
 
 def test_table_already_eating_at_startup_starts_consuming() -> None:
-    sim = Sim(fresh=True).run(Seg(30, seated=3, objects=4))
+    sim = Sim(fresh=True).run(Seg(50, seated=3, objects=4))
     assert sim.transitions() == [(L, C)]
     (opened,) = sim.of(SessionOpened)
     assert opened.partial
@@ -429,7 +436,7 @@ def test_table_already_eating_at_startup_starts_consuming() -> None:
 
 
 def test_table_occupied_at_startup_without_food_is_partial_unattended() -> None:
-    sim = Sim(fresh=True).run(Seg(30, seated=2))
+    sim = Sim(fresh=True).run(Seg(50, seated=2))
     assert sim.transitions() == [(L, OC)]
     assert sim.m.session is not None
     assert sim.m.session.partial
@@ -468,6 +475,98 @@ def test_group_size_ignores_one_frame_duplicates() -> None:
 
 def test_flickering_food_at_startup_still_means_consuming() -> None:
     sim = Sim(fresh=True)
-    for _ in range(10):  # los platos se detectan 1 de cada 2 segundos
+    for _ in range(17):  # los platos se detectan 1 de cada 3 segundos
         sim.run(Seg(1, seated=3, objects=2), Seg(2, seated=3, objects=0))
     assert sim.transitions() == [(L, C)]
+
+
+# --------------------------------------------------------------------------- devolución demo v2
+
+
+def test_startup_waits_to_validate_before_choosing_the_initial_state() -> None:
+    """Al arrancar no se muestra "Sin atender" a los 20 s: se mira `startup_verify_s` y la
+    comida que aparece en ese rato decide el estado inicial."""
+    sim = Sim(fresh=True).run(Seg(25, seated=2), Seg(25, seated=2, objects=2))
+    assert sim.transitions() == [(L, C)]
+    assert sim.m.session is not None and sim.m.session.partial  # noqa: PT018
+
+
+def test_machine_reports_verifying_during_startup() -> None:
+    sim = Sim(fresh=True).run(Seg(5, seated=2))
+    assert sim.m.verifying
+    sim.run(Seg(45, seated=2))
+    assert not sim.m.verifying
+
+
+def test_food_flickering_below_the_window_ratio_is_not_consumption() -> None:
+    sim = Sim().run(Seg(10), Seg(30, seated=2))
+    for _ in range(15):  # un "vaso" (el servilletero) que aparece 1 s de cada 4
+        sim.run(Seg(1, seated=2, objects=1), Seg(3, seated=2))
+    assert sim.m.state is OC
+
+
+def test_short_stay_without_service_leaves_the_table_free() -> None:
+    """Se sientan dos minutos y se cambian de mesa: no hubo servicio, la mesa no queda sucia."""
+    params = replace(EngineParams(), startup_grace_s=-1)
+    sim = Sim(params, fresh=True).run(Seg(10), Seg(100, seated=2), Seg(130))
+    assert sim.transitions() == [(L, OC), (OC, L)]
+    (closed,) = sim.of(SessionClosed)
+    assert closed.reason is SessionCloseReason.NO_SERVICE
+
+
+def test_a_long_unattended_stay_is_still_a_session() -> None:
+    params = replace(EngineParams(), startup_grace_s=-1)
+    sim = Sim(params, fresh=True).run(Seg(10), Seg(300, seated=2), Seg(130))
+    assert sim.transitions() == [(L, OC), (OC, S)]
+
+
+def test_table_cleaned_without_seeing_the_waiter() -> None:
+    """En una mesa donde se ve la vajilla, la mesa vacía y sin objetos un rato queda libre."""
+    sim = Sim().run(
+        Seg(10),
+        Seg(30, seated=2),
+        Seg(60, seated=2, objects=3),  # comen
+        Seg(130, objects=3),  # se van: sucia
+        Seg(70, objects=0),  # alguien la levantó sin que la cámara viera al mozo
+    )
+    assert sim.transitions() == [(L, OC), (OC, C), (C, S), (S, L)]
+
+
+def test_dirty_table_without_object_detection_needs_the_waiter() -> None:
+    sim = Sim().run(Seg(10), Seg(30, seated=2), Seg(130, objects=0), Seg(120, objects=0))
+    assert sim.m.state is S  # nunca se vio vajilla en esta mesa: no hay cómo saber que la limpiaron
+
+
+def test_gap_in_observations_revalidates_the_table() -> None:
+    """Se corta el video una hora: la mesa no sigue como estaba, se vuelve a evaluar."""
+    sim = Sim().run(Seg(10), Seg(30, seated=2), Seg(60, seated=2, objects=3))
+    assert sim.m.state is C
+    old = sim.m.session
+    assert old is not None
+    sim.t += 3600
+    sim.run(Seg(60))  # al volver la mesa está vacía
+    assert sim.m.state is L
+    closed = sim.of(SessionClosed)
+    assert [c.reason for c in closed] == [SessionCloseReason.VISION_LOST]
+    assert closed[0].closed_at < sim.ts() - timedelta(
+        seconds=3000
+    )  # cuando se la vio por última vez
+
+
+def test_gap_with_people_still_there_opens_a_partial_session() -> None:
+    sim = Sim(fresh=True).run(Seg(15), Seg(30, seated=2))
+    assert not sim.of(SessionOpened)[0].partial
+    sim.t += 3600
+    sim.run(Seg(60, seated=3, objects=2))
+    opened = sim.of(SessionOpened)
+    assert len(opened) == 2
+    assert opened[1].partial
+    assert sim.m.state is C
+
+
+def test_people_standing_at_arrival_are_not_an_early_visit() -> None:
+    """El cliente que llega parado con el grupo (y parece mozo unos segundos) no es atención."""
+    params = replace(EngineParams(), startup_grace_s=-1)
+    sim = Sim(params, fresh=True).run(Seg(10), Seg(4, seated=1), Seg(6, seated=1, staff=True))
+    sim.run(Seg(30, seated=2))
+    assert sim.transitions() == [(L, OC)]
