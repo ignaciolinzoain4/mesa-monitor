@@ -96,3 +96,13 @@ veces; el hook `tools/fix_enum_checks.py` (configurado en alembic.ini) deja solo
 - **macOS**: uv marca los `.pth` del venv como ocultos → usar `PYTHONPATH=src` (Makefile).
 - **Docker local en Mac**: colima + `docker-buildx` (BuildKit). Sin `credsStore: desktop`.
 - A 0,6 fps (Mac sin GPU) casi no se detectan visitas: el mozo pasa entre frames. Apuntar a ≥ 2 fps.
+- **OC-SORT** (`trackers`) solo crea tracks con confianza ≥ 0.6 por defecto: la gente del fondo
+  (0.4–0.6) no se seguía y sus mesas figuraban libres. `TrackerParams.high_conf`.
+- **Bordes de mosaicos**: quien queda sobre el borde sale como dos "medias personas". Se agrega una
+  pasada sobre la región entera (`TilingParams.full_pass`) + `suppress_contained`.
+- **Vajilla lejana**: platos de mesas chicas en la imagen salen con 0.25–0.30; el umbral de objetos
+  depende del tamaño de la mesa (`scene.object_min_conf`) y el consumo exige una ventana (no un frame).
+- **Vaciado**: contar "cualquiera en la zona de asientos" hace que las mesas nunca se vacíen (vecinos,
+  gente de paso). Solo cuentan sentados o quietos en una silla; zonas de asientos sin superponerse.
+- **Clientes que la cámara ve "parados"** pero están quietos en la silla: cuentan como sentados y
+  nunca como mozo (`PersonFeatures.still`).

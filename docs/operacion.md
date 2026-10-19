@@ -50,6 +50,20 @@ Las migraciones de la base se aplican solas al arrancar la API.
 - Recortes de personas (solo si se activa la recolección): 7 días por defecto.
 - No se graba video.
 
+## Cortes de cámara, de luz o reinicios
+
+El sistema no adivina lo que pasó mientras no miraba:
+
+- **Al arrancar** (o después de un corte de más de 5 minutos), cada mesa se mira unos 45 segundos
+  antes de decidir su estado: con comida o bebida en la mesa arranca en **Consumiendo**; con
+  gente sin comida, en **Sin atender**; vacía, **Libre**. En el video de prueba esas mesas se ven
+  en gris ("Verificando") durante ese rato.
+- Lo que estaba abierto antes del corte se cierra a la hora en que se vio por última vez. Las
+  sesiones que arrancan así quedan marcadas como **parciales** (no se sabe cuándo se sentaron) y
+  no cuentan para los tiempos de espera.
+- Si una cámara se cae menos de 15 minutos, las mesas retoman su estado al volver y los
+  cronómetros descuentan ese tiempo.
+
 ## Problemas frecuentes
 
 | Problema | Qué revisar |
