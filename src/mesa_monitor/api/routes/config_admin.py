@@ -220,6 +220,10 @@ class VisionSettings(BaseModel):
     moving_ratio: float = Field(default=1.8, ge=1.0, le=6.0)
     seats_expand: float = Field(default=1.25, ge=1.0, le=2.0)
     debug_overlay: bool = False
+    collect_crops: bool = Field(
+        default=False, description="Guardar recortes para entrenar (apagado)"
+    )
+    crops_retention_days: int = Field(default=7, ge=1, le=30)
 
     @field_validator("model")
     @classmethod

@@ -18,15 +18,10 @@ repos:
     hooks:
       - id: gitleaks
 
-  - repo: local
+  # ruff oficial (no depende de que `uv` esté en el PATH de quien hace el commit)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.1
     hooks:
       - id: ruff-check
-        name: ruff check
-        entry: uv run --no-sync ruff check --fix
-        language: system
-        types: [python]
+        args: [--fix]
       - id: ruff-format
-        name: ruff format
-        entry: uv run --no-sync ruff format
-        language: system
-        types: [python]

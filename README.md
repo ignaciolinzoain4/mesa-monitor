@@ -23,7 +23,7 @@ Incluye un panel de análisis y una API para conectarlo con el sistema de gesti�
 | F6 | Pantalla /alertas para PCs de tiqueo (sonido, PIN, reconexión) | ✅ |
 | F7 | Métricas SQL, dashboard de análisis y export CSV | ✅ |
 | F8 | Cliente Python, INTEGRATION.md, ejemplos y JSON Schemas | ✅ |
-| F9 | Evaluación y ajuste | Pendiente |
+| F9 | Evaluación (tools/evaluate.py), guías de calibración/ajuste/operación, endurecimiento | ✅ (falta 1 h de video anotado del local) |
 
 ## Instalación rápida (Docker)
 
@@ -39,6 +39,18 @@ Abrir <http://localhost:8000>. El estado del servidor está en <http://localhost
 y la documentación de la API en <http://localhost:8000/api/v1/docs>.
 
 En `.env`, `COMPOSE_PROFILES=cpu` usa el procesador; `COMPOSE_PROFILES=gpu` usa una placa NVIDIA.
+
+## Documentación
+
+| Para | Documento |
+|---|---|
+| Instalar (Windows/Linux, GPU, cámaras, benchmark) | [docs/instalacion.md](docs/instalacion.md) |
+| Calibrar zonas, perfil de personal y postura | [docs/calibracion.md](docs/calibracion.md) |
+| Medir la precisión y ajustar | [docs/ajuste.md](docs/ajuste.md) |
+| Operación diaria, backups, actualización | [docs/operacion.md](docs/operacion.md) |
+| Acceso desde fuera del local | [docs/acceso-remoto.md](docs/acceso-remoto.md) |
+| Cumplimiento (empleados, AAIP) | [docs/cumplimiento.md](docs/cumplimiento.md) |
+| Integrar con el sistema de gestión | [INTEGRATION.md](INTEGRATION.md) |
 
 ## Desarrollo
 

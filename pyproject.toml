@@ -80,6 +80,7 @@ ignore = [
 "tests/**" = ["S101", "S105", "S106", "E501", "SIM117"]
 "migrations/**" = ["N999", "E501"]
 "src/mesa_monitor/api/metrics_service.py" = ["E501"]  # SQL
+"tools/evaluate.py" = ["E501"]  # tabla del reporte
 # Cliente: nombres de errores en español a propósito; compatible con Python 3.10 (sin StrEnum)
 "client/**" = ["N818", "UP042", "UP007"]
 "client/tests/**" = ["S101", "E501", "PT011", "S105"]

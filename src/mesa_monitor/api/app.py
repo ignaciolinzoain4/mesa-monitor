@@ -21,6 +21,7 @@ from mesa_monitor.api.alert_engine import AlertEngine
 from mesa_monitor.api.camera_monitor import CameraMonitor
 from mesa_monitor.api.events_hub import EventsHub
 from mesa_monitor.api.ratelimit import RateLimitMiddleware
+from mesa_monitor.api.retention import RetentionTask
 from mesa_monitor.api.routes import (
     access,
     alerts,
@@ -38,6 +39,7 @@ from mesa_monitor.api.routes import (
     ws,
     zones,
 )
+from mesa_monitor.api.security_headers import SecurityHeadersMiddleware
 from mesa_monitor.api.snapshots import SnapshotCache
 from mesa_monitor.api.webhooks import WebhookDispatcher
 from mesa_monitor.config import Settings, get_settings
@@ -109,6 +111,7 @@ def create_app(
         app.state.events_hub = hub
         dispatcher = WebhookDispatcher(sessionmaker, transport=webhook_transport)
         app.state.webhooks = dispatcher
+        retention = RetentionTask(sessionmaker)
         try:
             async with sessionmaker() as session:
                 await ensure_admin(
@@ -129,9 +132,11 @@ def create_app(
             hub.start()
             alert_engine.start()
             dispatcher.start()
+            retention.start()
         try:
             yield
         finally:
+            await retention.stop()
             await alert_engine.stop()
             await dispatcher.stop()
             await hub.stop()
@@ -158,6 +163,7 @@ def create_app(
             allow_headers=["*"],
         )
 
+    app.add_middleware(SecurityHeadersMiddleware)
     if rate_limit:
         app.add_middleware(RateLimitMiddleware)
 

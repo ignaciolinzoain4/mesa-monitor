@@ -78,6 +78,7 @@ class Worker:
         self._stop = asyncio.Event()
         self._was_open: bool | None = None
         self._debug_jpeg: dict[str, bytes] = {}
+        self._crops: Any = None
         self._debug_lock = threading.Lock()
 
     # ------------------------------------------------------------------ config
@@ -172,6 +173,13 @@ class Worker:
             self._last_results[cid] = (frame.ts, result)
             if self.cfg.debug_overlay:
                 await asyncio.to_thread(self._render_debug, cid)
+            if self.cfg.collect_crops:
+                from mesa_monitor.vision.crops import CropCollector
+
+                if self._crops is None:
+                    self._crops = CropCollector(self.settings.crops_dir)
+                self._crops.retention_days = self.cfg.crops_retention_days
+                await asyncio.to_thread(self._crops.collect, cid, frame.image, result, frame.ts)
 
         from mesa_monitor.vision.scene import CameraTableObs, fuse
 

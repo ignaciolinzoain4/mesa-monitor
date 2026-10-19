@@ -6,6 +6,7 @@ x-app-env: &app-env
   GO2RTC_URL: http://go2rtc:1984
   DASHBOARD_DIST: /app/dashboard/dist
   CONFIG_DIR: /app/config/local
+  CROPS_DIR: /data/crops
 
 name: mesa-monitor
 
@@ -102,6 +103,7 @@ services:
     volumes:
       - ./config/local:/app/config/local  # escribe recommended.yaml (benchmark)
       - models:/models
+      - crops:/data/crops  # solo si se activa la recolección de recortes
     depends_on:
       db:
         condition: service_healthy
@@ -129,6 +131,7 @@ services:
     volumes:
       - ./config/local:/app/config/local
       - models:/models
+      - crops:/data/crops
     deploy:
       resources:
         reservations:
@@ -148,3 +151,4 @@ volumes:
   pgdata:
   go2rtc-config:
   models:  # pesos de RF-DETR descargados (no se bajan en cada arranque)
+  crops:  # recortes opcionales para entrenamiento (apagado por defecto, retención 7 días)

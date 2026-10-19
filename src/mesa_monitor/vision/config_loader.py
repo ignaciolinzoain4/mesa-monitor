@@ -57,6 +57,8 @@ class WorkerConfig:
     posture: PostureParams | None = None
     seats_expand: float = 1.25
     debug_overlay: bool = False
+    collect_crops: bool = False
+    crops_retention_days: float = 7
 
     def views_of(self, table_id: str) -> list[tuple[str, ViewZone]]:
         return [
@@ -117,6 +119,8 @@ async def load_worker_config(
         vision = settings.get("vision") or {}
         cfg.seats_expand = float(vision.get("seats_expand", 1.25))
         cfg.debug_overlay = bool(vision.get("debug_overlay", False))
+        cfg.collect_crops = bool(vision.get("collect_crops", False))
+        cfg.crops_retention_days = float(vision.get("crops_retention_days", 7))
         if "standing_ratio" in vision or "frame_aspect" in vision:
             cfg.posture = PostureParams(
                 standing_ratio=float(vision.get("standing_ratio", 1.6)),

@@ -11,6 +11,8 @@ type Vision = {
   moving_ratio: number
   seats_expand: number
   debug_overlay: boolean
+  collect_crops: boolean
+  crops_retention_days: number
 }
 
 export function VisionTab() {
@@ -64,6 +66,19 @@ export function VisionTab() {
           <input type="checkbox" checked={v.debug_overlay} onChange={(e) => upd({ debug_overlay: e.target.checked })} />
           Overlay de debug (solo para calibrar; consume recursos)
         </label>
+      </div>
+      <h3 className="mb-2 mt-6 font-medium">Recolección de recortes (opcional)</h3>
+      <p className="mb-3 text-sm text-slate-400">
+        Guarda imágenes de personas para entrenar a futuro un reconocedor de personal más preciso. Apagado por defecto. Si lo activás, informalo a los empleados (ver docs/cumplimiento.md). Se borran solas.
+      </p>
+      <div className="flex flex-wrap items-end gap-4">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" checked={v.collect_crops} onChange={(e) => upd({ collect_crops: e.target.checked })} />
+          Guardar recortes
+        </label>
+        <Field label="Borrar a los (días)">
+          <input type="number" min={1} max={30} className={`${inputClass} w-24`} value={v.crops_retention_days} onChange={num('crops_retention_days')} />
+        </Field>
       </div>
       <h3 className="mb-2 mt-6 font-medium">Detección por mosaicos</h3>
       <p className="mb-3 text-sm text-slate-400">Divide la imagen en partes para ver a las personas lejanas. Imprescindible con cámaras en altura y gran angular; cuesta ~4 veces más.</p>

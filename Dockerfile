@@ -52,6 +52,6 @@ COPY src/ src/
 COPY tools/ tools/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --no-editable --extra vision --extra ${TORCH_VARIANT}
-RUN mkdir -p /models /app/config/local && chown -R mesa:mesa /models /app/config
+RUN mkdir -p /models /app/config/local /data/crops && chown -R mesa:mesa /models /app/config /data
 USER mesa
 CMD ["python", "-m", "mesa_monitor.vision"]
