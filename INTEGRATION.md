@@ -82,6 +82,7 @@ MESA_MONITOR_API_KEY=mm_pegar_aca_la_clave
 
 ```python
 from dotenv import load_dotenv
+
 load_dotenv()
 ```
 
@@ -128,7 +129,8 @@ Marcar una alerta como vista (deja de sonar en las PCs del local): `client.ack_a
 def nueva_alerta(event):
     print("Nueva alerta:", event.data.where, event.data.alert_type.value)
 
-client.start_in_background()   # apps comunes (script, Flask, Django, Tkinter, Streamlit)
+
+client.start_in_background()  # apps comunes (script, Flask, Django, Tkinter, Streamlit)
 # o, en apps async (FastAPI):  asyncio.create_task(client.run_forever())
 ```
 
@@ -149,7 +151,9 @@ from datetime import datetime, timedelta
 hoy = client.get_metrics(from_=datetime.now().astimezone() - timedelta(hours=12))
 g = hoy.groups[0]
 print(g.n_sessions, "mesas atendidas")
-print("Espera promedio:", round((g.t_esp.avg or 0) / 60, 1), "min")   # los tiempos vienen en SEGUNDOS
+print(
+    "Espera promedio:", round((g.t_esp.avg or 0) / 60, 1), "min"
+)  # los tiempos vienen en SEGUNDOS
 print("A tiempo:", g.sla_pct, "%")
 ```
 
@@ -193,6 +197,7 @@ Agrupar: `client.get_metrics(group_by="hour")` (también `day`, `weekday`, `shif
 Para ver qué hace el cliente, activar el log:
 ```python
 import logging
+
 logging.basicConfig(level=logging.INFO)
 ```
 
