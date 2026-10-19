@@ -1,4 +1,4 @@
-"""Métricas de atención de mesas (SPEC §9). El cálculo se implementa en F7.
+"""Métricas de atención de mesas (SPEC §9). El cálculo está en `api/metrics_service.py`.
 
 RESTRICCIÓN DE CUMPLIMIENTO (SPEC Anexo A, docs/cumplimiento.md):
 - Las métricas se agregan SOLO por mesa, sector, franja horaria, día, día de semana y turno.

@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from mesa_monitor.api.deps import AdminUser, AnyPrincipal, AuthUser, CurrentUser, DbSession
+from mesa_monitor.api.deps import AdminUser, AnyPrincipal, AuthUser, DbSession, Principal
 from mesa_monitor.api.schemas import TableIn, TableLayoutItem, TableOut, TablePatch
 from mesa_monitor.core.ids import new_id
 from mesa_monitor.db.audit import CHANNEL_CONFIG, Actor, notify, record_audit
@@ -28,7 +28,7 @@ _TABLE_FIELDS = (
 )
 
 
-def actor_of(user: CurrentUser) -> Actor:
+def actor_of(user: Principal) -> Actor:
     return user.actor
 
 

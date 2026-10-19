@@ -69,10 +69,6 @@ class Principal:
         return Actor(kind[self.kind], self.username)
 
 
-# Compatibilidad con el nombre anterior.
-CurrentUser = Principal
-
-
 def _unauthorized(detail: str) -> HTTPException:
     return HTTPException(
         status.HTTP_401_UNAUTHORIZED, detail=detail, headers={"WWW-Authenticate": "Bearer"}

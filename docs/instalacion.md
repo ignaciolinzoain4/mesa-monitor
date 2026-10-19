@@ -63,7 +63,8 @@ git clone https://github.com/ignaciolinzoain4/mesa-monitor.git && cd mesa-monito
    mkdir -p config/local
    cp config/example/cameras.yaml config/local/cameras.yaml
    ```
-   Para cada cámara, poner el número de canal del NVR (el mismo que se ve en DMSS).
+   Para cada cámara, poner el número de canal del NVR (el mismo que se ve en DMSS). Para otras
+   marcas o cámaras sueltas, ver "Conectar cualquier sistema de cámaras" en el [README](../README.md).
 3. Levantar todo:
    ```sh
    docker compose up -d --build

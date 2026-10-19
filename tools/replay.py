@@ -22,7 +22,7 @@ import json
 import sys
 import time
 from dataclasses import asdict, is_dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -41,7 +41,7 @@ from mesa_monitor.core.state_engine import (
     VisitStarted,
 )
 from mesa_monitor.vision.detector import Detector, DetectorParams, TilingParams, TrackerParams
-from mesa_monitor.vision.pipeline import CameraPipeline, annotate
+from mesa_monitor.vision.pipeline import CameraPipeline, TableOverlay, annotate
 from mesa_monitor.vision.scene import CameraTableObs, CameraZonesRT, ViewZone, fuse
 from mesa_monitor.vision.sources import file_frames
 from mesa_monitor.vision.staff import StaffWeights
@@ -119,6 +119,12 @@ def main(argv: list[str] | None = None) -> int:
         help="umbral del state engine, ej. occupy_confirm_s=15",
     )
     ap.add_argument("--annotate", action="store_true", help="guardar video anotado (annotated.mp4)")
+    ap.add_argument(
+        "--video-fps",
+        type=float,
+        default=None,
+        help="fps del video anotado (ej. 15 = fluido; la detección sigue a --fps)",
+    )
     ap.add_argument("--out", type=Path)
     args = ap.parse_args(argv)
 
@@ -147,10 +153,21 @@ def main(argv: list[str] | None = None) -> int:
     n = 0
     last_ts: datetime | None = None
     with (out / "observations.jsonl").open("w") as obs_f, (out / "events.jsonl").open("w") as ev_f:
+        render_fps = max(args.fps, args.video_fps or args.fps) if args.annotate else args.fps
         frames = file_frames(
-            args.video, args.fps, start, args.seconds, args.skip, pts_tz=ZoneInfo(args.video_tz)
+            args.video, render_fps, start, args.seconds, args.skip, pts_tz=ZoneInfo(args.video_tz)
         )
+        next_detect: datetime | None = None
+        result = None
+        overlay: dict[str, TableOverlay] = {}
+        clock = ""
         for frame in frames:
+            if next_detect is not None and frame.ts < next_detect:
+                # Frame intermedio: se dibuja con el último análisis (video fluido).
+                if writer is not None and result is not None:
+                    writer.write(annotate(frame.image, zones, result, None, overlay, clock))
+                continue
+            next_detect = frame.ts + timedelta(seconds=1 / args.fps)
             result = pipe.process(frame.image, frame.ts)
             for v in zones.views:
                 obs = fuse(
@@ -167,8 +184,21 @@ def main(argv: list[str] | None = None) -> int:
                         change = f"{e.from_state} → {e.to_state}"
                         print(f"  {hhmm:%H:%M:%S}  mesa {e.table_id}: {change} ({e.reason})")
             if args.annotate:
-                writer = writer or _VideoWriter(out / "annotated.mp4", args.fps, frame.image.shape)
-                writer.write(annotate(frame.image, zones, result))
+                writer = writer or _VideoWriter(
+                    out / "annotated.mp4", render_fps, frame.image.shape
+                )
+                overlay = {}
+                for tid, m in engine.machines.items():
+                    snap = m.snapshot()
+                    elapsed = None
+                    if snap.state_since is not None:
+                        elapsed = (frame.ts - snap.state_since).total_seconds() - snap.paused_s
+                    # En mesas ocupadas se muestra el tamaño del grupo (más estable que el conteo
+                    # de un frame, que parpadea cuando el detector pierde a alguien).
+                    people = snap.max_people if snap.session_id else snap.people_now
+                    overlay[tid] = TableOverlay(snap.state.value, elapsed, people)
+                clock = frame.ts.astimezone(tz).strftime("%H:%M:%S")
+                writer.write(annotate(frame.image, zones, result, None, overlay, clock))
             n += 1
             last_ts = frame.ts
             if n % 50 == 0:

@@ -73,7 +73,8 @@ veces; el hook `tools/fix_enum_checks.py` (configurado en alembic.ini) deja solo
 - Rotación `R = N_ses / (N_mesas · H_op)`. `G_max` se calcula sobre `[t_a, visitas…, t_v]`.
 - Día de negocio con hora de corte (`app_settings`) porque el local cierra después de medianoche; turnos en `shifts`.
 - La escalada warning→critical ignora "Visto" y "Posponer". El SLA usa el `U_1` efectivo de cada mesa.
-- Cámaras fuera del NVR: `cameras.stream_url_template` propio por cámara.
+- Cámaras de cualquier marca: `preset` por conexión (dahua, hikvision, reolink, …), `url_template`
+  propio o `source`/`source_main` literales por cámara (`config/cameras.py`, README).
 - Video en vivo: MSE/MJPEG por HTTP por defecto; WebRTC opcional (en Docker Desktop/Windows necesita UDP + candidates).
 - La UI de go2rtc no tiene login: se publica solo en `127.0.0.1`. La API reexpone snapshot y video
   en vivo (`/cameras/{id}/snapshot`, `/live.mjpeg`) con su propia autenticación.

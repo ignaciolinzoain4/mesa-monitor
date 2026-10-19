@@ -94,3 +94,47 @@ def test_example_config_is_valid() -> None:
     example = Path("config/example/cameras.yaml").read_text()
     cams = parse_cameras(example, {"NVR_HOST": "h", "NVR_USER": "u", "NVR_PASSWORD": "p"})
     assert cams.cameras
+
+
+@pytest.mark.parametrize(
+    ("preset", "sub", "main"),
+    [
+        ("dahua", "/cam/realmonitor?channel=3&subtype=1", "/cam/realmonitor?channel=3&subtype=0"),
+        ("hikvision", "/Streaming/Channels/302", "/Streaming/Channels/301"),
+        ("uniview", "/unicast/c3/s1/live", "/unicast/c3/s0/live"),
+        ("reolink", "/h264Preview_03_sub", "/h264Preview_03_main"),
+        ("tapo", "/stream2", "/stream1"),
+    ],
+)
+def test_brand_presets(preset: str, sub: str, main: str) -> None:
+    text = f"""
+connections:
+  nvr: {{host: 10.0.0.5, user: u, password: p, preset: {preset}}}
+cameras:
+  - {{id: c3, name: C3, channel: 3}}
+"""
+    cams = parse_cameras(text, {})
+    cam = cams.cameras[0]
+    assert cams.stream_url(cam, 1) == f"rtsp://u:p@10.0.0.5:554{sub}"
+    assert cams.stream_url(cam, 0) == f"rtsp://u:p@10.0.0.5:554{main}"
+
+
+def test_unknown_preset_and_custom_template() -> None:
+    with pytest.raises(CamerasConfigError, match="preset desconocido"):
+        parse_cameras("connections: {x: {host: h, preset: marca-x}}\ncameras: []", {})
+    cams = parse_cameras(
+        "connections: {x: {host: h, url_template: 'rtsp://{host}/live/{quality}'}}\n"
+        "cameras: [{id: a, name: A, connection: x}]",
+        {},
+    )
+    assert cams.stream_url(cams.cameras[0], 1) == "rtsp://h/live/sub"
+
+
+def test_literal_sources_with_separate_main() -> None:
+    cams = parse_cameras(
+        "cameras: [{id: ip, name: IP, source: 'rtsp://cam/low', source_main: 'rtsp://cam/high'}]",
+        {},
+    )
+    cam = cams.cameras[0]
+    assert cams.stream_url(cam, 1) == "rtsp://cam/low"
+    assert cams.stream_url(cam, 0) == "rtsp://cam/high"

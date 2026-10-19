@@ -5,8 +5,8 @@ Estados:
 - `degraded` — llega imagen con otra resolución (zonas desalineadas o substream mal configurado).
 - `offline`  — no llega imagen hace más de `offline_after_s`.
 
-Cada cambio de estado se guarda en `camera_status_log`. Desde F3 el worker también reporta fps;
-este sondeo queda como respaldo y para cámaras que el worker todavía no procesa.
+Cada cambio de estado se guarda en `camera_status_log` y se publica como evento `camera.status`.
+El worker reporta además fps y latencia por cámara (Salud del sistema).
 """
 
 import asyncio

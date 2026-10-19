@@ -6,6 +6,7 @@ Lo usan el worker en vivo y `tools/replay.py`, así el replay prueba exactamente
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 import numpy as np
 import supervision as sv
@@ -153,42 +154,142 @@ class CameraPipeline:
         return result
 
 
+# Mismos colores que el dashboard y /alertas.
+STATE_COLORS: dict[str, tuple[int, int, int]] = {
+    "LIBRE": (22, 101, 52),
+    "OCUPADA_SIN_ATENDER": (180, 83, 9),
+    "ATENDIDA": (29, 78, 216),
+    "DESOCUPADA_SUCIA": (126, 34, 206),
+    "SIN_VISION": (71, 85, 105),
+    "DESHABILITADA": (30, 41, 59),
+}
+STATE_NAMES = {
+    "LIBRE": "Libre",
+    "OCUPADA_SIN_ATENDER": "Sin atender",
+    "ATENDIDA": "Atendida",
+    "DESOCUPADA_SUCIA": "Sucia",
+    "SIN_VISION": "Sin visión",
+    "DESHABILITADA": "Deshabilitada",
+}
+
+
+@dataclass(frozen=True)
+class TableOverlay:
+    """Estado de una mesa para dibujar (lo que sale del state engine)."""
+
+    state: str
+    elapsed_s: float | None
+    people: int
+
+
 def annotate(
     frame: NDArray[np.uint8],
     zones: CameraZonesRT,
     result: SceneResult,
     labels: dict[str, str] | None = None,
+    states: dict[str, TableOverlay] | None = None,
+    clock: str | None = None,
 ) -> NDArray[np.uint8]:
-    """Overlay de debug: zonas, personas (personal en amarillo, clientes en celeste) y conteos.
+    """Overlay de debug: zonas, personas (personal en amarillo, clientes en celeste) y, si se
+    pasan `states`, cada mesa pintada con su estado, cronómetro y personas.
 
-    Solo para calibrar (apagado por defecto). No se guarda en disco.
+    Solo para calibrar y para el replay (apagado por defecto). En vivo no se guarda en disco.
     """
-    from PIL import ImageDraw
+    from PIL import ImageDraw, ImageFont
 
     img = Image.fromarray(frame)
     d = ImageDraw.Draw(img, "RGBA")
     w, h = img.size
+    scale = max(1.0, h / 720)
+    font = ImageFont.load_default(size=round(13 * scale))
+    font_big = ImageFont.load_default(size=round(16 * scale))
+    top = 36 * scale if states is not None else 4.0
+    placed: list[tuple[float, float, float, float]] = []
 
     def px(poly: object) -> list[tuple[float, float]]:
         return [(p[0] * w, p[1] * h) for p in poly]  # type: ignore[attr-defined]
 
+    def label_box(x: float, y: float, text: str, fill: tuple[int, int, int, int], f: Any) -> None:
+        """Etiqueta con fondo; se corre para no salirse de la imagen ni pisar otra."""
+        bb = d.textbbox((0, 0), text, font=f)
+        tw, th = bb[2] - bb[0], bb[3] - bb[1]
+        x = min(max(4.0, x), w - tw - 8)
+        y = max(top, y)
+        for _ in range(12):
+            box = (x - 3, y - 2, x + tw + 3, y + th + 6)
+            hit = next(
+                (
+                    b
+                    for b in placed
+                    if box[0] < b[2] and box[2] > b[0] and box[1] < b[3] and box[3] > b[1]
+                ),
+                None,
+            )
+            if hit is None:
+                break
+            y = hit[1] - th - 10  # subir por encima de la que molesta
+            if y < top:
+                y = hit[3] + 2  # sin lugar arriba: abajo
+        box = (x - 3, y - 2, x + tw + 3, y + th + 6)
+        placed.append(box)
+        d.rectangle(box, fill=fill)
+        d.text((x, y), text, fill=(255, 255, 255, 255), font=f)
+
     for m in zones.ignore_masks:
-        d.polygon(px(m), fill=(248, 113, 113, 70))
+        d.polygon(px(m), fill=(248, 113, 113, 60))
     for z in zones.staff_zones:
         d.polygon(px(z), outline=(251, 191, 36, 255), width=2)
     for v in zones.views:
-        d.polygon(px(v.seats_polygon), outline=(52, 211, 153, 255), width=1)
-        d.polygon(px(v.table_polygon), outline=(56, 189, 248, 255), width=2)
-        counts = result.tables.get(v.table_id)
-        if counts:
-            x, y = px(v.table_polygon)[0]
-            name = (labels or {}).get(v.table_id, v.table_id)
-            label = f"{name} s:{counts.seated_customers}" + (" M" if counts.staff_present else "")
-            d.text((x + 2, y + 2), label, fill=(255, 255, 255, 255))
+        st = (states or {}).get(v.table_id)
+        color = STATE_COLORS.get(st.state, (56, 189, 248)) if st else (56, 189, 248)
+        d.polygon(px(v.seats_polygon), outline=(*color, 200), width=1)
+        d.polygon(
+            px(v.table_polygon), fill=(*color, 90) if st else None, outline=(*color, 255), width=3
+        )
     for p in result.people:
         b = p.box
-        color = (250, 204, 21, 255) if p.is_staff else (56, 189, 248, 255)
-        d.rectangle((b.x1 * w, b.y1 * h, b.x2 * w, b.y2 * h), outline=color, width=2)
-        tag = ("MOZO" if p.is_staff else "cli") + (" parado" if p.standing else "")
-        d.text((b.x1 * w + 2, b.y1 * h - 10), f"#{b.track_id} {tag}", fill=color)
+        box_xy = (b.x1 * w, b.y1 * h, b.x2 * w, b.y2 * h)
+        if p.is_staff:
+            d.rectangle(box_xy, outline=(250, 204, 21, 255), width=3)
+        else:  # clientes: discretos, para que resalten mesas y personal
+            d.rectangle(box_xy, outline=(186, 230, 253, 110), width=1)
+    for v in zones.views:  # etiquetas al final: siempre por encima de las cajas
+        st = (states or {}).get(v.table_id)
+        name = (labels or {}).get(v.table_id, v.table_id)
+        xs = [q[0] for q in px(v.table_polygon)]
+        ys = [q[1] for q in px(v.table_polygon)]
+        x, y = min(xs), min(ys) - 22 * scale
+        if st:
+            color = STATE_COLORS.get(st.state, (56, 189, 248))
+            timer = ""
+            if st.elapsed_s is not None and st.state not in ("LIBRE", "DESHABILITADA"):
+                mins, secs = divmod(int(st.elapsed_s), 60)
+                timer = f" {mins}:{secs:02d}"
+            state_name = STATE_NAMES.get(st.state, st.state)
+            label_box(
+                x, y, f"{name} · {state_name}{timer} · {st.people} pers.", (*color, 230), font_big
+            )
+        else:
+            counts = result.tables.get(v.table_id)
+            seated = counts.seated_customers if counts else 0
+            label_box(x, y, f"{name} s:{seated}", (15, 23, 42, 200), font)
+    for p in result.people:
+        if p.is_staff:
+            label_box(p.box.x1 * w, p.box.y1 * h - 18 * scale, "MOZO", (161, 98, 7, 230), font)
+    if states is not None:
+        d.rectangle((0, 0, w, 30 * scale), fill=(2, 6, 23, 210))
+        x = 8.0
+        if clock:
+            d.text((x, 6 * scale), clock, fill=(255, 255, 255, 255), font=font_big)
+            x += d.textlength(clock, font=font_big) + 16 * scale
+        for key in ("LIBRE", "OCUPADA_SIN_ATENDER", "ATENDIDA", "DESOCUPADA_SUCIA"):
+            d.rectangle((x, 9 * scale, x + 12 * scale, 21 * scale), fill=(*STATE_COLORS[key], 255))
+            d.text(
+                (x + 16 * scale, 7 * scale), STATE_NAMES[key], fill=(226, 232, 240, 255), font=font
+            )
+            x += 16 * scale + d.textlength(STATE_NAMES[key], font=font) + 14 * scale
+        d.rectangle(
+            (x, 9 * scale, x + 12 * scale, 21 * scale), outline=(250, 204, 21, 255), width=2
+        )
+        d.text((x + 16 * scale, 7 * scale), "Mozo", fill=(226, 232, 240, 255), font=font)
     return np.asarray(img)

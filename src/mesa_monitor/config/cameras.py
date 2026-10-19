@@ -2,6 +2,15 @@
 
 Los valores `${VAR}` / `${VAR:-default}` se reemplazan por variables de entorno, así las
 credenciales quedan en `.env` y nunca en el YAML.
+
+Cualquier sistema de cámaras sirve si entrega video por RTSP, ONVIF, HTTP/MJPEG o archivo:
+- `preset` de marca (dahua, hikvision, reolink, …) arma la URL RTSP sola;
+- `url_template` propio para cualquier otra marca;
+- `source` / `source_main` literales por cámara (cualquier fuente que acepte go2rtc).
+
+Variables de `url_template`: {user} {password} {host} {port} {channel} {channel2} (01, 02…)
+{subtype} (0 = principal, 1 = secundario) {stream_n} (1 = principal, 2 = secundario)
+{quality} ("main" / "sub").
 """
 
 import os
@@ -16,6 +25,20 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, StringConstraints,
 DAHUA_URL_TEMPLATE = (
     "rtsp://{user}:{password}@{host}:{port}/cam/realmonitor?channel={channel}&subtype={subtype}"
 )
+# Plantillas RTSP por marca (las documentadas por cada fabricante; verificar con el manual del
+# equipo si algo no conecta). Grabadores: {channel} = número de cámara en el NVR/DVR.
+PRESETS: dict[str, str] = {
+    "dahua": DAHUA_URL_TEMPLATE,
+    "amcrest": DAHUA_URL_TEMPLATE,  # misma familia que Dahua
+    "intelbras": DAHUA_URL_TEMPLATE,  # misma familia que Dahua
+    "hikvision": "rtsp://{user}:{password}@{host}:{port}/Streaming/Channels/{channel}0{stream_n}",
+    "ezviz": "rtsp://{user}:{password}@{host}:{port}/Streaming/Channels/{channel}0{stream_n}",
+    "uniview": "rtsp://{user}:{password}@{host}:{port}/unicast/c{channel}/s{subtype}/live",
+    "reolink": "rtsp://{user}:{password}@{host}:{port}/h264Preview_{channel2}_{quality}",
+    "tapo": "rtsp://{user}:{password}@{host}:{port}/stream{stream_n}",
+    # ONVIF: go2rtc descubre las URLs solo (no distingue principal/secundario).
+    "onvif": "onvif://{user}:{password}@{host}:{port}",
+}
 SUBSTREAM = 1
 MAIN_STREAM = 0
 
@@ -35,17 +58,35 @@ class Connection(BaseModel):
     port: int = 554
     user: str = ""
     password: SecretStr = SecretStr("")
-    url_template: str = DAHUA_URL_TEMPLATE
+    preset: str | None = None  # marca: ver PRESETS. Por defecto, Dahua.
+    url_template: str | None = None  # plantilla propia (gana sobre el preset)
+
+    @model_validator(mode="after")
+    def _known_preset(self) -> Self:
+        if self.preset is not None and self.preset not in PRESETS:
+            raise ValueError(
+                f"preset desconocido {self.preset!r}; válidos: {', '.join(sorted(PRESETS))} "
+                "(o definí url_template)"
+            )
+        return self
+
+    @property
+    def template(self) -> str:
+        return self.url_template or PRESETS[self.preset or "dahua"]
 
     def url(self, channel: int | None, subtype: int) -> str:
         # Usuario y clave se escapan: una clave con "@" o ":" rompería la URL RTSP.
-        return self.url_template.format(
+        ch = 1 if channel is None else channel
+        return self.template.format(
             user=quote(self.user, safe=""),
             password=quote(self.password.get_secret_value(), safe=""),
             host=self.host,
             port=self.port,
-            channel="" if channel is None else channel,
+            channel=ch,
+            channel2=f"{ch:02d}",
             subtype=subtype,
+            stream_n=subtype + 1,
+            quality="sub" if subtype == SUBSTREAM else "main",
         )
 
 
@@ -57,8 +98,10 @@ class Camera(BaseModel):
     enabled: bool = True
     connection: str | None = "nvr"
     channel: int | None = Field(default=None, ge=1, le=64)
-    # Fuente go2rtc literal (ej. un video de prueba). Si está, se ignoran connection/channel.
+    # Fuente go2rtc literal (cualquier URL rtsp://, http://, onvif://, ffmpeg:archivo…).
+    # Si está, se ignoran connection/channel. `source_main` = versión en alta para snapshots.
     source: str | None = None
+    source_main: str | None = None
     fps_detection: float = Field(default=3.0, gt=0, le=15)
     expected_resolution: tuple[int, int] | None = None
 
@@ -92,7 +135,7 @@ class CamerasFile(BaseModel):
     def stream_url(self, cam: Camera, subtype: int) -> str:
         """URL de origen para go2rtc. Contiene credenciales: no loguear (usar `redact_url`)."""
         if cam.source is not None:
-            return cam.source
+            return cam.source_main if subtype == MAIN_STREAM and cam.source_main else cam.source
         if cam.connection is None:  # imposible: lo garantiza Camera._source_or_channel
             raise CamerasConfigError(f"la cámara {cam.id!r} no tiene conexión")
         return self.connections[cam.connection].url(cam.channel, subtype)
