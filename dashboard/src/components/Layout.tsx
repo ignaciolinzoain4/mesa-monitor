@@ -3,6 +3,9 @@ import { useAuth } from '../lib/auth'
 
 const NAV: { to: string; label: string; adminOnly?: boolean }[] = [
   { to: '/camaras', label: 'Cámaras', adminOnly: true },
+  { to: '/zonas', label: 'Zonas', adminOnly: true },
+  { to: '/plano', label: 'Plano del salón', adminOnly: true },
+  { to: '/respaldo', label: 'Respaldo', adminOnly: true },
 ]
 
 export function Layout() {

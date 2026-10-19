@@ -24,3 +24,45 @@ export type Health = {
   database: 'ok' | 'error'
   ts: string
 }
+
+export type Point = [number, number]
+export type Polygon = Point[]
+
+export type Table = {
+  id: string
+  label: string
+  sector: string
+  capacity: number | null
+  enabled: boolean
+  plan_x: number
+  plan_y: number
+  plan_w: number
+  plan_h: number
+  plan_rotation: number
+  group_id: string | null
+  camera_ids: string[]
+}
+
+export type CleanMode = 'objects_and_staff' | 'staff_visit_only'
+export type StaffZoneKind = 'bar' | 'kitchen_pass' | 'cashier' | 'other'
+
+export type TableView = {
+  id?: string
+  table_id: string
+  table_polygon: Polygon
+  seats_polygon: Polygon
+  priority: number
+  clean_mode: CleanMode
+}
+
+export type StaffZone = { id?: string; kind: StaffZoneKind; name: string; polygon: Polygon }
+export type IgnoreMask = { id?: string; name: string; polygon: Polygon }
+
+export type CameraZones = {
+  camera_id: string
+  table_views: TableView[]
+  staff_zones: StaffZone[]
+  ignore_masks: IgnoreMask[]
+}
+
+export type TableState = 'LIBRE' | 'OCUPADA_SIN_ATENDER' | 'ATENDIDA' | 'DESOCUPADA_SUCIA' | 'SIN_VISION' | 'DESHABILITADA'

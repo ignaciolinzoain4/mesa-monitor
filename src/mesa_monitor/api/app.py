@@ -18,7 +18,7 @@ from starlette.types import Scope
 
 from mesa_monitor import __version__
 from mesa_monitor.api.camera_monitor import CameraMonitor
-from mesa_monitor.api.routes import auth, cameras, health
+from mesa_monitor.api.routes import auth, cameras, config_io, health, tables, zones
 from mesa_monitor.config import Settings, get_settings
 from mesa_monitor.config.cameras import CamerasConfigError, CamerasFile, load_cameras
 from mesa_monitor.db.bootstrap import ensure_admin, sync_cameras
@@ -120,7 +120,7 @@ def create_app(
             allow_headers=["*"],
         )
 
-    for module in (health, auth, cameras):
+    for module in (health, auth, cameras, tables, zones, config_io):
         app.include_router(module.router, prefix=API_PREFIX)
 
     dist = Path(settings.dashboard_dist)

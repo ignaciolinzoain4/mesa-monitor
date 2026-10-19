@@ -46,6 +46,6 @@ export function AuthImage({
       </div>
     )
   }
-  if (!current?.url) return <div className={`animate-pulse bg-slate-800 ${className ?? ''}`} />
+  if (!current?.url) return <div className={`min-h-48 min-w-64 animate-pulse bg-slate-800 ${className ?? ''}`} />
   return <img src={current.url} alt={alt} className={className} onLoad={(e) => onLoad?.(e.currentTarget)} />
 }

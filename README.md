@@ -16,7 +16,7 @@ Incluye un panel de análisis y una API para conectarlo con el sistema de gesti�
 |---|---|---|
 | F0 | Esqueleto: Docker Compose, Postgres + migraciones, API `/health`, dashboard vacío, CI | ✅ |
 | F1 | Ingesta de cámaras (go2rtc), snapshots, benchmark de hardware | ✅ |
-| F2 | Editor de zonas y plano del salón | Pendiente |
+| F2 | Editor de zonas y plano del salón, respaldo YAML | ✅ |
 | F3 | Detección + tracking + overlay + replay de video | Pendiente |
 | F4 | Máquina de estados de mesa + clasificador de mozos | Pendiente |
 | F5 | API completa, WebSocket, alertas, webhooks | Pendiente |

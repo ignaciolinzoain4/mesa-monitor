@@ -2,8 +2,11 @@ import { createBrowserRouter, Navigate, RouterProvider, useLocation } from 'reac
 import type { ReactNode } from 'react'
 import { Layout } from './components/Layout'
 import { AuthProvider, useAuth } from './lib/auth'
+import { BackupPage } from './pages/BackupPage'
 import { CamerasPage } from './pages/CamerasPage'
 import { LoginPage } from './pages/LoginPage'
+import { PlanPage } from './pages/PlanPage'
+import { ZonesPage } from './pages/ZonesPage'
 
 function RequireAuth({ children, admin = false }: { children: ReactNode; admin?: boolean }) {
   const { user, loading } = useAuth()
@@ -25,6 +28,9 @@ const router = createBrowserRouter([
     children: [
       { path: '/', element: <Navigate to="/camaras" replace /> },
       { path: '/camaras', element: <RequireAuth admin><CamerasPage /></RequireAuth> },
+      { path: '/zonas', element: <RequireAuth admin><ZonesPage /></RequireAuth> },
+      { path: '/plano', element: <RequireAuth admin><PlanPage /></RequireAuth> },
+      { path: '/respaldo', element: <RequireAuth admin><BackupPage /></RequireAuth> },
       { path: '*', element: <Navigate to="/" replace /> },
     ],
   },
