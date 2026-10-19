@@ -244,8 +244,12 @@ def annotate(
     states: dict[str, TableOverlay] | None = None,
     clock: str | None = None,
     alerts: list[OverlayAlert] | None = None,
+    layout: dict[str, tuple[float, float]] | None = None,
 ) -> NDArray[np.uint8]:
     """Overlay para el replay y la calibración (en vivo no se guarda en disco).
+
+    `layout` (opcional, se reutiliza entre frames) guarda dónde quedó cada etiqueta: así no
+    saltan de lugar cuando cambia el ancho de otra.
 
     Diseño limpio: cada mesa con un relleno suave de su color de estado y una etiqueta tipo
     píldora (número, estado, cronómetro, personas); el personal con un marcador chico sobre la
@@ -267,14 +271,34 @@ def annotate(
     def overlaps(b: tuple[float, float, float, float]) -> bool:
         return any(b[0] < o[2] and b[2] > o[0] and b[1] < o[3] and b[3] > o[1] for o in placed)
 
-    def place(cx: float, top: float, bw: float, bh: float) -> tuple[float, float]:
-        """Ubica una caja centrada en `cx` cerca de `top` sin pisar otra ni salirse."""
-        x = min(max(4.0, cx - bw / 2), w - bw - 4)
-        for dy in (0, -1, 1, -2, 2, -3, 3, -4, 4):
-            y = min(max(4.0, top + dy * (bh + 3 * k)), h - bh - 4)
-            if not overlaps((x, y, x + bw, y + bh)):
-                break
+    def overlap_area(b: tuple[float, float, float, float]) -> float:
+        return sum(
+            max(0.0, min(b[2], o[2]) - max(b[0], o[0]))
+            * max(0.0, min(b[3], o[3]) - max(b[1], o[1]))
+            for o in placed
+        )
+
+    def place(key: str, cx: float, top: float, bw: float, bh: float) -> tuple[float, float]:
+        """Ubica una caja cerca de (`cx`, `top`) sin pisar otra ni salirse de la imagen. Prueba
+        primero el lugar del frame anterior, después corrimientos verticales y horizontales; si
+        no hay lugar libre, el que menos pisa."""
+
+        def clamp(x: float, y: float) -> tuple[float, float]:
+            return min(max(4.0, x), w - bw - 4), min(max(4.0, y), h - bh - 4)
+
+        candidates: list[tuple[float, float]] = []
+        if layout is not None and key in layout:
+            candidates.append(clamp(*layout[key]))
+        step = bh + 3 * k
+        for dy in (0, -1, 1, -2, 2, -3, 3):
+            for dx in (0.0, -0.6, 0.6, -1.1, 1.1):
+                candidates.append(clamp(cx - bw / 2 + dx * bw, top + dy * step))
+        # `min` es estable: entre los que no pisan nada gana el primero (el del frame anterior).
+        best = min(candidates, key=lambda c: overlap_area((c[0], c[1], c[0] + bw, c[1] + bh)))
+        x, y = best
         placed.append((x, y, x + bw, y + bh))
+        if layout is not None:
+            layout[key] = (x, y)
         return x, y
 
     calibrating = states is None
@@ -299,7 +323,7 @@ def annotate(
     if not calibrating:
         placed.append((x0, y0, x0 + pw, y0 + ph_panel))
         ay = 0.115 * h
-        for a in (alerts or [])[:4]:
+        for a in (alerts or [])[:3]:
             cw = max(d.textlength(a.title, font=f_at), d.textlength(a.detail, font=f_ad)) + 30 * k
             rect = (w - cw - 10 * k, ay, w - 10 * k, ay + 40 * k)
             cards.append((a, rect))
@@ -346,7 +370,7 @@ def annotate(
             counts = result.tables.get(v.table_id)
             text = f"{name}  {counts.seated_customers if counts else 0} sent."
             tw = d.textlength(text, font=f_small)
-            x, y = place(cx, top, tw + 2 * pad, ph)
+            x, y = place(v.table_id, cx, top, tw + 2 * pad, ph)
             d.rounded_rectangle((x, y, x + tw + 2 * pad, y + ph), ph / 2, fill=(15, 23, 42, 210))
             d.text((x + pad, y + ph / 2), text, font=f_small, fill="white", anchor="lm")
             continue
@@ -363,7 +387,7 @@ def annotate(
         if people:
             parts_w += 8 * k + 9 * k + d.textlength(str(people), font=f_small)
         bw = 3 * k + num_w + 7 * k + parts_w + pad
-        x, y = place(cx, top, bw, ph)
+        x, y = place(v.table_id, cx, top, bw, ph)
         d.rounded_rectangle((x, y, x + bw, y + ph), ph / 2, fill=(*color, 240))
         # número de mesa en un círculo/óvalo blanco
         nx0, ny0 = x + 3 * k, y + 3 * k

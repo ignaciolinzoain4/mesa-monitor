@@ -103,6 +103,9 @@ def overlay_state(
             snap.last_visit_at,
         )
         for a in table_alerts(inp, DEFAULTS, now):
+            # En el video solo los avisos que piden hacer algo ya (como /alertas con sonido).
+            if a.alert_type.value not in ("SIN_ATENCION", "MESA_SUCIA"):
+                continue
             mins = int(a.elapsed_s // 60)
             what = {
                 "SIN_ATENCION": "sin atender",
@@ -210,12 +213,15 @@ def main(argv: list[str] | None = None) -> int:
         result = None
         overlay: dict[str, TableOverlay] = {}
         alerts: list[OverlayAlert] = []
+        layout: dict[str, tuple[float, float]] = {}  # posición de cada etiqueta (no salta)
         clock = ""
         for frame in frames:
             if next_detect is not None and frame.ts < next_detect:
                 # Frame intermedio: se dibuja con el último análisis (video fluido).
                 if writer is not None and result is not None:
-                    writer.write(annotate(frame.image, zones, result, None, overlay, clock, alerts))
+                    writer.write(
+                        annotate(frame.image, zones, result, None, overlay, clock, alerts, layout)
+                    )
                 continue
             next_detect = frame.ts + timedelta(seconds=1 / args.fps)
             result = pipe.process(frame.image, frame.ts)
@@ -240,7 +246,9 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 overlay, alerts = overlay_state(engine, frame.ts)
                 clock = frame.ts.astimezone(tz).strftime("%H:%M:%S")
-                writer.write(annotate(frame.image, zones, result, None, overlay, clock, alerts))
+                writer.write(
+                    annotate(frame.image, zones, result, None, overlay, clock, alerts, layout)
+                )
             n += 1
             last_ts = frame.ts
             if n % 50 == 0:
@@ -321,7 +329,7 @@ class _VideoWriter:
         rate = Fraction(fps).limit_denominator(1000)
         try:  # H.264: se reproduce en cualquier lado (WhatsApp, navegador, celular)
             self._s = self._c.add_stream("libx264", rate=rate)
-            self._s.options = {"crf": "22", "preset": "medium"}
+            self._s.options = {"crf": "26", "preset": "medium"}
         except (av.FFmpegError, ValueError):
             self._s = self._c.add_stream("mpeg4", rate=rate)
             self._s.bit_rate = 4_000_000
