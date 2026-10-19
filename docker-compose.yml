@@ -35,6 +35,7 @@ services:
       target: api
     image: mesa-monitor-api:local
     restart: "no"
+    user: "0"  # escribe en un volumen nuevo (root); el archivo queda con permisos 600
     env_file:
       - path: .env
         required: false
